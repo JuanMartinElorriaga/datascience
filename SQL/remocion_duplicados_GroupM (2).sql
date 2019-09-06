@@ -1,3 +1,6 @@
+--POSGRESQL. REMOCION DE DUPLICADOS Y CALCULOS CORRESPONDIENTES A COLUMNAS DE SUMA (totals) Y PROMEDIO (rates).
+--CREACIÓN DE UN SUBQUERY "with" POR CADA TIPO DE PLATAFORMA (Facebook/Linkedin/Snapchat/Twitter; Google/Bing, Traditional Display Media).
+--CADA UNA DE LAS PLATAFORMA UTILIZA UN GRUPO DE VARIABLES DE AGRUPAMIENTO DIFERENTES
 with duplicados_google as (select 
 --id 	,
 agency	,
@@ -385,6 +388,7 @@ buy_type
 -- end_date	
 )
 
+--APPEND PARA CREAR UN UNICO QUERY EN BASE A LOS RESULTADOS ARROJADOS ANTERIORMENTE:
 select *
 from duplicados_google
 union all
