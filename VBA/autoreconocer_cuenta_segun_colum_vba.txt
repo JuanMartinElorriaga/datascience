@@ -1,0 +1,10 @@
+Sub Cuenta_inteligente()
+'Toma el rango de valores selección y devuelve el resultado en la celda activa'
+'Atajo de teclado: ctrl + b
+    If ActiveCell.Column = 25 Or ActiveCell.Column = 32 Then 'Cambiar numero de columnas según lo requerido
+        ActiveCell.Value = Application.WorksheetFunction.Average(Selection) 'Promedio
+    Else
+        ActiveCell.Value = Application.WorksheetFunction.Sum(Selection) 'Suma
+    End If
+
+End Sub
