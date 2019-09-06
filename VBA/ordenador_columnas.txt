@@ -1,0 +1,33 @@
+'Cambiar columnas segun requerimiento
+Sub SortMultipleColumns()
+With ActiveSheet.Sort
+     .SortFields.Add Key:=Range("B11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("C11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("D11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("E11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("F11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("G11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("H11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("I11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("J11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("K11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("L11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("M11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("V11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("O11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("Q11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("R11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("S11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("T11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("U11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("V11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("X11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("AE11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("AH11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("AI11"), Order:=xlAscending
+     .SortFields.Add Key:=Range("AJ11"), Order:=xlAscending
+     .SetRange Range("B11", Range("BE11").End(xlDown))
+     .Header = xlYes
+     .Apply
+End With
+End Sub
