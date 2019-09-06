@@ -1,0 +1,61 @@
+Sub LoopFolder_auto()
+
+Dim Wb As Workbook
+Dim MyFile As String, Str As String, MyDir As String, myPath As String
+Dim Rws As Long, Rng As Range
+Dim FldrPicker As FileDialog
+
+'Optimización Macro
+Application.EnableEvents = False
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+
+'Preguntar por TARGET FOLDER
+  Set FldrPicker = Application.FileDialog(msoFileDialogFolderPicker)
+
+    With FldrPicker
+      .Title = "Select A Target Folder"
+      .AllowMultiSelect = False
+        If .Show <> -1 Then GoTo NextCode
+        myPath = .SelectedItems(1) & "\"
+    End With
+
+'If Cancel
+NextCode:
+  myPath = myPath
+  If myPath = "" Then GoTo ResetSettings
+
+Set Wb = ThisWorkbook
+MyDir = myPath
+MyFile = Dir(MyDir & "*.xls*")
+ChDir MyDir
+
+Do While MyFile <> ""
+    Workbooks.Open (MyFile)
+       ' If Sheets("MEDIA PLAN").ProtectContents = True Then
+          '  Sheets("MEDIA PLAN").Unprotect Password:="mPlatform2017"
+       ' End If
+    With Worksheets("MEDIA PLAN")
+    Rws = .Cells(Rows.Count, "B").End(xlUp).Row
+    Set Rng = Range(.Cells(12, 2), .Cells(Rws, 57)) '-------> BE = 57
+    Rng.Copy Wb.Worksheets("CONSOLIDADO").Cells(Rows.Count, "A").End(xlUp).Offset(1, 0)
+    ActiveWorkbook.Close True
+    End With
+    MyFile = Dir()
+    Loop
+    
+    
+'Copiar encabezado
+Sheets("MEDIA PLAN").Range("B11:BE11").Copy Destination:=Sheets("CONSOLIDADO").Range("A1")
+
+'AutoFit:
+Sheets("CONSOLIDADO").UsedRange.Columns.AutoFit
+    
+'Flag final
+ResetSettings:
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+Application.DisplayAlerts = True
+
+End Sub
