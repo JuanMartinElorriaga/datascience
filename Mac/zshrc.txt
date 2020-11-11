@@ -1,0 +1,51 @@
+#rellenar .zshrc con este script para adherir personalizaciones
+
+#alias
+alias ll='ls -l --color=auto'
+alias showip="ifconfig"
+alias lt='du -sh * | sort -h' #sort by size
+alias mnt='mount | grep -E ^/dev | column -t' #ver solo montadas
+alias count='find . -type f | wc -l' #count files
+alias lsa='ls -a'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias .....='cd ../../../..'
+
+# Find and set branch name var if in git repository.
+function git_branch_name()
+{
+  branch=$(git symbolic-ref HEAD 2> /dev/null | awk 'BEGIN{FS="/"} {print $NF}')
+  if [[ $branch == "" ]];
+  then
+    :
+  else
+    echo ' - ('$branch')'
+  fi
+}
+
+# Enable substitution in the prompt.
+setopt prompt_subst
+# activate colors in Terminal
+export CLICOLOR=1
+# Config for prompt. PS1 synonym.
+prompt='%2/ $(git_branch_name) > '
+prompt='%B%F{0045}%2/%f%F{039}$(git_branch_name)%f %F{0045}->%f%b '
+
+
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/juanmartinelorriaga/anaconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/juanmartinelorriaga/anaconda3/etc/profile.d/conda.sh" ]; then
+        . "/Users/juanmartinelorriaga/anaconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/juanmartinelorriaga/anaconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
