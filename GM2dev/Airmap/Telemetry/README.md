@@ -2,6 +2,7 @@ AIRMAP_01_ExploratoryAnalysis_25112020
 ==============================
 
 First project for AIRMAP.  Exploratory Analysis and Data Visualization based on a single sample of the whole universe collected in 2020. The sample was given by Michael Murry. Date: 25112020.
+Refresh: the first dataset was corrupted (partially) so it had to be asked for again)
 
 Project Organization
 ------------
