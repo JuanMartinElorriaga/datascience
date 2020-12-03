@@ -1,0 +1,148 @@
+---
+title: "Predicciones MN"
+output: html_notebook
+---
+
+```{r}
+#Lector de .las
+source("C:/Users/SE31886/Documents/Prediccion_MN/COCINA/script/Las_parser_98.R")
+#filtrado de flags
+library(dplyr)
+DATA_df <- DATA_df %>% filter(AT90>=0)
+DATA_df <- DATA_df %>% filter(AT90<=200) #por pedido de Alberto
+
+#Librerias
+library("readxl")
+#Lector de Tope Base
+
+archivo <- "C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/data/Proyecto_Severini Lucas_Ultima Version_20190806.xlsx"
+DATA_Tope_Base <- read_xlsx(archivo, sheet ="Hoja2", skip = 1)
+colnames(DATA_Tope_Base)[1]<-"WELL"
+colnames(DATA_Tope_Base)[3]<-"TopeCocinaMD"
+colnames(DATA_Tope_Base)[4]<-"BaseCocinaMD"
+colnames(DATA_Tope_Base)[6]<-"TopeVacaMuertaMD"
+colnames(DATA_Tope_Base)[7]<-"BaseVacaMuertaMD"
+```
+#Estan en Tope Base y no tengo .las
+
+```{r}
+#Check consistencia de archivos
+library(sqldf)
+
+#Estan en Tope Base y no tengo .las
+sqldf("SELECT DISTINCT UPPER(WELL) WELL FROM DATA_Tope_Base WHERE UPPER(WELL) NOT IN (SELECT DISTINCT UPPER(WELL) FROM DATA_df)")
+
+```
+#Tengo .las pero no tengo Tope Base
+```{r}
+#Tengo .las pero no tengo Tope Base
+sqldf("SELECT DISTINCT UPPER(WELL) WELL FROM DATA_df WHERE UPPER(WELL) NOT IN (SELECT DISTINCT UPPER(WELL) FROM DATA_Tope_Base)")
+```
+
+
+
+```{r}
+suppressWarnings(ggcorr(DATA_df,size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlaciones"))
+```
+
+#JOIN 
+```{r}
+#revisar que todos los pozos contengan datos de NO COCINA
+# DATA_TB_NOCOCINA <- sqldf(
+# "SELECT UPPER(D.WELL) WELL, D.RO, D.DEPTH, D.AT90 
+#  FROM DATA_df D 
+#  INNER JOIN DATA_Tope_Base DTB 
+#  ON UPPER(D.WELL) = UPPER(DTB.WELL) AND 
+#  D.DEPTH <= DTB.TopeCocinaMD AND
+#  D.DEPTH >= DTB.TopeVacaMuertaMD
+#   ")
+# #frecuencias de No Cocina. No debería haber vacíos
+# sqldf("SELECT WELL, COUNT(*) frecuencia FROM DATA_TB_NOCOCINA GROUP BY WELL ORDER BY frecuencia, WELL")
+
+#recortes de tope y base utilizando "inner join". Elimina lo que queda fuera de los limites
+DATA_TB <- sqldf(
+"SELECT UPPER(D.WELL) WELL, D.RO, D.DEPTH, D.AT90 
+ FROM DATA_df D 
+ INNER JOIN DATA_Tope_Base DTB 
+ ON UPPER(D.WELL)=UPPER(DTB.WELL) AND 
+ D.DEPTH BETWEEN DTB.TopeVacaMuertaMD AND DTB.BaseVacaMuertaMD
+  ")
+
+suppressWarnings(ggcorr(DATA_TB,size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlaciones"))
+```
+
+#AGRUPANDO POR METRO
+```{r}
+#Agrupo por Pozo y DEPTH como entero, por metro. Promedio todos los valores.
+DATA_TB_GRP_POZO_DEPTH <- sqldf("SELECT  WELL,  CAST(DEPTH AS INTEGER) DEPTH_MTS,  AVG(Ro) RO,	AVG(AT90) AT90, count(1) QMedidas FROM DATA_TB GROUP BY WELL, CAST(DEPTH AS INTEGER)")
+
+```
+
+```{r}
+#quito pozos que ya se encuentran dentro de los 14 entrenados
+
+DATA_TB_GRP_POZO_DEPTH <- subset(DATA_TB_GRP_POZO_DEPTH, !(WELL %in% c(POZOS)))
+```
+
+#CARGO MODELO
+```{r}
+library(h2o)
+h2o.shutdown(prompt = FALSE)
+h2o.init()
+
+# MODELO_A_CARGAR<-"C://Users//SE31886//Documents//Prediccion_MN//PROP_ORGANICO//modelo//MODELOS_INTERVALOS_CONFIANZA//100porCiento_TODO_filtroAT90_20200313144912//TODOfiltroAT90_StackedEnsemble_AllModels_AutoML_20200313_133832"
+
+#FINAL 100porCiento
+MODELO_A_CARGAR <- "C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/1MODELO_FINAL_FULL/modelos/AAFINAL_100porCiento_StackedEnsemble_BestOfFamily_AutoML_20200319_214902"
+
+#FINAL 8020
+MODELO_A_CARGAR <- "C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/AAFINAL_100porCiento_TODO_filtroAT90_8020_20200319163833/modelos/AAFINAL_8020_StackedEnsemble_AllModels_AutoML_20200319_152637"
+
+automl_leader<-h2o.loadModel(MODELO_A_CARGAR)
+
+DATA_TB_GRP_POZO_DEPTH.hex  <- as.h2o(DATA_TB_GRP_POZO_DEPTH)
+
+pred_conversion <- h2o.predict(object = automl_leader, newdata = DATA_TB_GRP_POZO_DEPTH.hex)
+
+DATA_TB_GRP_POZO_DEPTH_PRED<-data.frame(DATA_TB_GRP_POZO_DEPTH,predict= as.data.frame(pred_conversion$predict))
+
+#Agregar variable DELTA
+df_MTR_NRO <- sqldf('SELECT distinct WELL, DEPTH_MTS FROM DATA_TB_GRP_POZO_DEPTH_PRED') %>% 
+  group_by(WELL) %>% 
+  mutate(DELTA=row_number())
+
+DATA_TB_GRP_POZO_DEPTH_PRED<-data.frame(DATA_TB_GRP_POZO_DEPTH_PRED,DELTA=df_MTR_NRO$DELTA)
+
+write.csv(DATA_TB_GRP_POZO_DEPTH_PRED,"C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/AAFINAL_pred_df_100_recorteAT90_MNPredecirTodos.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#boxplot de AT90 100 pozos.
+boxplot_AT90 <- ggplot(DATA_TB_GRP_POZO_DEPTH_PRED, aes(y=AT90)) +
+  geom_boxplot(notch  = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: AT90")
+boxplot_AT90
+#cantidad de 
+#print(sqldf("SELECT COUNT(*) FROM DATA_TB_GRP_POZO_DEPTH_PRED WHERE AT90>=1000"))
+
+#boxplot de AT90 100 pozos.
+boxplot_AT90_well <- ggplot(DATA_TB_GRP_POZO_DEPTH_PRED, aes(x=WELL, y=AT90)) +
+  geom_boxplot(notch  = FALSE)+ coord_flip() + ggtitle("Boxplot por pozo: AT90")
+boxplot_AT90_well
+
+```

@@ -1,0 +1,409 @@
+---
+title: "MN_ploteos"
+author: "JM"
+date: "December 26, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+root.dir="C:/Users/SE31886/Documents/Prediccion_MN/PROP_Y_ORGANICO"
+#librerias
+librerias <- c("corrplot","PerformanceAnalytics","reshape","sqldf","GGally","ggplot2","factoextra",
+               "psych","plotrix","REdaS","ppls","Metrics","grid","gridExtra","lmtest","nls2","e1071",
+               "glmnet","rpart","rpart.plot","caret","ggpubr","dplyr", "funModeling")
+invisible(lapply(librerias, library, character.only = TRUE))
+#Carga del parser de archivos .las
+source("C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\script\\MN_wrangling.R")
+```
+
+```{r}
+#PROYECTO MN.
+#Script de visualizaciones. (Ploteos y tabulados)  #Modificar datos_sin_cocina por el df conveniente
+#DATOS NO AGRUPADOS
+#FUNMODELING PLOTS. VARIABLES SIN AGRUPACION
+#library(funModeling)
+#para exportar, usar path_out
+df_status(datos_POZOS_DET)    #cantidad de 0. NA. Type. unique values
+plot_num(datos_POZOS_DET, path_out = "C:\\Users\\SE31886\\Documents\\ploteos\\histogramas") #histogr numericas path_out = "plot_num_cocina_nuevo"
+profiling_num(datos_POZOS_DET[ , !(names(datos_sin_cocina) %in% c("WELL"))]) #media, desvio, coef variac, percentiles, curtosis, asimetria.
+freq(datos_POZOS_DET$WELL) #datos y gráfico de frecuencias para variables categóricas
+#Obs: alta frecuencia de datos en pozo YPF.NQ.LLL-997
+
+correlation_table(datos_POZOS_DET, "MN_XO_AD") #tabla de corr. Variable objetivo luego del df
+
+datos_POZOS_DET2 <- datos_POZOS_DET
+datos_POZOS_DET2$WELL <- NULL
+
+rank_importance <- var_rank_info(datos_POZOS_DET2, "MN_XO_AD") #Ranking de best features basado en teoría de la información
+#en = entropy; #mi= mutual info; #ig = info gain ; gr: gain ratio
+rank_importance_plot <- ggplot(rank_importance, 
+       aes(x = reorder(var, gr), 
+           y = gr, fill = var)
+       ) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + 
+  theme_bw() + 
+  xlab("") + 
+  ylab("Importancia de variables (basado en la ganancia de informacion)"
+       ) + 
+  guides(fill = FALSE)
+
+rank_importance_plot
+```
+
+
+```{r}
+#Boxplots por pozo
+pdf("bxp_at90.pdf")
+bxp_s_agr_AT90_NC<-ggplot(datos_sin_cocina, aes(x=WELL, y=AT90, fill=WELL)) +
+  geom_boxplot(notch  = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: AT90")
+bxp_s_agr_AT90_NC
+dev.off()
+
+bxp_s_agr_RO_NC<-ggplot(datos_sin_cocina, aes(x=WELL, y=RO, fill=WELL)) +
+  geom_boxplot(notch  = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: RO")
+bxp_s_agr_RO_NC
+
+bxp_s_agr_DEPTH_NC<-ggplot(datos_sin_cocina, aes(x=WELL, y=DEPTH, fill=WELL)) +
+  geom_boxplot(notch  = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: DEPTH")
+bxp_s_agr_DEPTH_NC
+```
+
+
+```{r}
+#Grids
+
+#MN_XO_AD
+pdf("grid_MN_sAgrup.pdf")
+p1<-ggboxplot(datos_POZOS_DET$MN_XO_AD,  xlab = FALSE, ylab = TRUE, fill="skyblue", orientation = "horizontal",alpha = 0.5) + xlab("MN_XO_AD")
+p2<-ggplot(data=datos_POZOS_DET, aes(x=MN_XO_AD)) + geom_histogram(alpha = 0.5, fill="skyblue") + geom_vline(aes(xintercept=mean(MN_XO_AD)),color="blue", linetype="dashed", size=0.3) + xlab("MN_XO_AD") + ylab("frecuencia")
+grid.newpage()
+g1 <- grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+#+   geom_vline(aes(xintercept=1000),color="red", linetype="dashed", size=0.3) 
+#g1<-grid.arrange(p1, p2, nrow = 2)
+dev.off()
+
+summary(datos_POZOS_DET$MN_XO_AD)
+```
+
+
+```{r}
+#Correlaciones
+
+#Global
+suppressWarnings(ggcorr(datos_sin_cocina,size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlacion RAW"))
+
+#Por pozo
+for (pozo in POZOS) {
+  plot<-suppressWarnings(ggcorr(datos_sin_cocina[datos_sin_cocina$WELL==pozo,],size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle (paste(pozo," - Correlacion RAW",sep="")))
+print(plot)
+}
+```
+
+
+
+
+
+
+
+
+
+###############
+
+```{r}
+#DATOS AGRUPADOS POR METRO
+
+#FUNMODELING PLOTS. VARIABLES AGRUPADAS
+#pdf("funhist_TODO.pdf")
+plot_num(datos_GRP_POZO_DEPTH_TODO, path_out = "funhist_TODO_recorte.pdf") #path_out = "funhist_TODO.pdf" #histogr numericas
+#dev.off()
+
+profiling_num(datos_GRP_POZO_DEPTH_TODO[ , !(names(datos_sin_cocina) %in% c("WELL"))]) #media, desvio, coef variac, percentiles, curtosis, asimetria.
+freq(datos_GRP_POZO_DEPTH_TODO) #datos y gráfico de frecuencias para variables categóricas path_out = 
+"freq_Agrup_cocina"
+correlation_table(datos_GRP_POZO_DEPTH_TODO, "MN_XO_AD") #tabla de corr. Variable objetivo luego del df
+
+datos_GRP_POZO_DEPTH_TODO2 <- datos_GRP_POZO_DEPTH_TODO
+datos_GRP_POZO_DEPTH_TODO2$WELL <- NULL
+
+rank_importance <- var_rank_info(datos_GRP_POZO_DEPTH_TODO2, "MN_XO_AD") #Ranking de best features basado en teoría de la información
+#en = entropy; #mi= mutual info; #ig = info gain ; gr: gain ratio
+pdf("rank_importance_agr.pdf")
+theory_plot_agr <- ggplot(rank_importance, 
+       aes(x = reorder(var, gr), 
+           y = gr, fill = var)
+       ) + 
+  geom_bar(stat = "identity", alpha = 0.9) + 
+  coord_flip() + 
+  theme_bw() + 
+  xlab("Variable") + 
+  ylab("Importancia de variables
+       (basado en Ganancia de Informaci�n)"
+       ) + 
+  guides(fill = FALSE)
+theory_plot_agr
+dev.off()
+```
+
+
+```{r}
+#Boxplots
+pdf("Boxplot_AT90_agr_recorte.pdf")
+bxp_agr<-ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=AT90, fill=WELL)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: AT90") + theme(legend.position="none")
+bxp_agr
+dev.off()
+
+pdf("boxplotsRO_agr.pdf")
+bxp_s_agr_RO_NC<-ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=RO, fill=WELL)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: RO") + theme(legend.position="none")
+bxp_s_agr_RO_NC
+dev.off()
+
+bxp_s_agr_RO_NC
+
+pdf("boxplotsDEPTH_agr.pdf")
+bxp_s_agr_DEPTH_NC<-ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=DEPTH_MTS, fill=WELL)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: DEPTH") + theme(legend.position="none")
+bxp_s_agr_DEPTH_NC
+dev.off()
+
+bxp_s_agr_MN_XO_AD_NC<-ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=MN_XO_AD, fill=WELL)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: MN_XO_AD") + theme(legend.position="none")
+bxp_s_agr_MN_XO_AD_NC
+
+
+#BOXPLOT DISTINCION POR COCINA
+#AT90
+jpeg("boxplot_separCocina_AT90.jpeg")
+bxp_agr_AT90 <- ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=AT90, fill=COCINA)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: AT90. Distincion por nivel") #+ theme(legend.position="none")
+bxp_agr_AT90
+dev.off()
+
+jpeg("boxplot_separCocina_MN.jpeg")
+bxp_agr_MN <- ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=MN_XO_AD, fill=COCINA)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: MN_XO_ADT. Distinción por nivel") #+ theme(legend.position="none")
+bxp_agr_MN
+dev.off()
+
+jpeg("boxplot_separCocina_DEPTH.jpeg")
+bxp_agr_DEPTH<-ggplot(datos_GRP_POZO_DEPTH_TODO, aes(x=WELL, y=DEPTH_MTS, fill=COCINA)) +
+  geom_boxplot(notch = TRUE)+ coord_flip() + ggtitle("Boxplot por pozo: DEPTH. Distinción por nivel") #+ theme(legend.position="none")
+bxp_agr_DEPTH
+dev.off()
+
+summary(datos_GRP_POZO_DEPTH_TODO$DEPTH_MTS)
+#ggsave(filename = "boxplot_at90_agrup´_TODO_SI", plot = bxp_agr, path = NULL, device = "jpeg")
+```
+
+
+```{r}
+#Grids
+#MN_XO_AD
+#pdf("grid_MN_agrup.pdf")
+p1<-ggboxplot(datos_GRP_POZO_DEPTH_TODO$MN_XO_AD,  xlab = FALSE, ylab = TRUE, fill="skyblue", orientation = "horizontal",alpha = 0.5)
+p2<-ggplot(data=datos_GRP_POZO_DEPTH_TODO, aes(x=MN_XO_AD)) + geom_histogram(alpha = 0.5, fill="skyblue") + geom_vline(aes(xintercept=mean(MN_XO_AD)),color="blue", linetype="dashed", size=0.3)
+#+   geom_vline(aes(xintercept=1000),color="red", linetype="dashed", size=0.3) 
+grid.newpage()
+g1<-grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+#dev.off()
+#ggsave(filename = "pruebaa", plot = g1, device = "jpeg", path=NULL)
+
+
+#AT90
+pdf("gridAT90_recorte.pdf")
+p1<-ggboxplot(datos_GRP_POZO_DEPTH_TODO$AT90,  xlab = FALSE, ylab = TRUE, fill="skyblue", orientation = "horizontal",alpha = 0.5)
+p2<-ggplot(data=datos_GRP_POZO_DEPTH_TODO, aes(x=AT90)) + geom_histogram(alpha = 0.5, fill="skyblue") + geom_vline(aes(xintercept=mean(AT90)),color="blue", linetype="dashed", size=0.3)  
+grid.newpage()
+g1<-grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+dev.off()
+
+#RO
+pdf("gridRO_agr_recorte.pdf")
+p1<-ggboxplot(datos_GRP_POZO_DEPTH_TODO$RO,  xlab = FALSE, ylab = TRUE, fill="skyblue", orientation = "horizontal",alpha = 0.5)
+p2<-ggplot(data=datos_GRP_POZO_DEPTH_TODO, aes(x=RO)) + geom_histogram(alpha = 0.5, fill="skyblue") + geom_vline(aes(xintercept=mean(RO)),color="blue", linetype="dashed", size=0.3)  
+grid.newpage()
+g1<-grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+dev.off()
+
+#DEPTH_MTS
+pdf("gridDEPTH_agrup.pdf")
+p1<-ggboxplot(datos_GRP_POZO_DEPTH_TODO$DEPTH_MTS,  xlab = FALSE, ylab = TRUE, fill="skyblue", orientation = "horizontal",alpha = 0.5)
+p2<-ggplot(data=datos_GRP_POZO_DEPTH_TODO, aes(x=DEPTH_MTS)) + geom_histogram(alpha = 0.5, fill="skyblue") + geom_vline(aes(xintercept=mean(DEPTH_MTS)),color="blue", linetype="dashed", size=0.3)
+grid.newpage()
+g1<-grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+dev.off() 
+
+summary(datos_GRP_POZO_DEPTH_TODO$RO)
+```
+
+
+```{r}
+#Correlaciones
+
+#Global Vs. Cocina
+pdf("corr_agr.pdf")
+cor_metro <- suppressWarnings(ggcorr(datos_GRP_POZO_DEPTH_TODO[,2:5],size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlaciones Metro Total"))
+cor_metro_cocina <- suppressWarnings(ggcorr(datos_GRP_POZO_DEPTH_soloC[,2:5],size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlaciones Metro nivel Cocina"))
+cor_metro_nococina <- suppressWarnings(ggcorr(datos_GRP_POZO_DEPTH_sinC[,2:5],size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle ("Correlaciones Metro No Cocina"))
+
+g1 <- grid.arrange(cor_metro, cor_metro_cocina, cor_metro_nococina, nrow = 2)
+dev.off()
+# grid.newpage()
+# g1<-grid.draw(rbind(ggplotGrob(cor_metro), ggplotGrob(cor_metro_cocina), ggplotGrob(cor_metro_nococina), size = "last"))
+# g1
+# dev.off()
+
+#Por pozo
+for (pozo in POZOS) {
+  plot<-suppressWarnings(ggcorr(datos_GRP_POZO_DEPTH[datos_GRP_POZO_DEPTH_TODO$WELL==pozo,c(2,4,5)],size=3,label = TRUE,  label_size = 4, label_round = 2, label_alpha = TRUE, hjust = 0.6, size = 3) + ggtitle (paste(pozo," - Correlacion RAW",sep="")))
+  print(plot)
+}
+```
+
+
+```{r}
+#Gráfico de RO como función de DEPTH
+pdf("RO_Vs_DEPTH.pdf")
+RO_RDM184 <- sqldf("SELECT * FROM datos_POZOS_DET WHERE WELL =\"YPF.NQ.RDM-184H\" ORDER BY DEPTH")
+gr1 <- ggplot(RO_RDM184, aes(y= DEPTH, x= RO, colour = DEPTH)) +
+  geom_point(size=1.3, alpha = 0.8) + 
+  xlab("RO") + ylab("DEPTH") + ggtitle("RO Vs. DEPTH para pozo YPF.NQ.RDM-184H ") +
+  geom_line(stat="smooth",method = "lm", formula = y ~ 0 + I(1/x) + I((x-1)/x),
+              size = 1,
+            colour = "#F37B59",
+              alpha = 0.5) + scale_colour_gradient( low="#00C1AA", high="#7997FF" )
+
+gr1
+dev.off()
+#Gráfico de RO como función de AT90
+gr1 <- ggplot(RO_RDM184, aes(y= AT90, x= RO, colour = DEPTH)) +
+  geom_point(size=1.3, alpha = 0.8) + 
+  xlab("RO") + ylab("AT90") + ggtitle("RO Vs. AT90 para pozo YPF.NQ.RDM-184H ") +
+  geom_line(stat="smooth",method = "lm", formula = y ~ 0 + I(1/x) + I((x-1)/x),
+              size = 1,
+            colour = "#F37B59",
+              alpha = 0.5) + scale_colour_gradient( low="#00C1AA", high="#7997FF" )
+gr1
+```
+
+
+```{r}
+#Suavización de curva para AT90. Antes y luego de agrupar por metro
+#Pozo de ejemplo: YPF.NQ.RDM-184H
+gr1 <- ggplot(datos_POZOS_DET[datos_POZOS_DET$WELL=="YPF.NQ.RDM-184H",], aes(x=DEPTH, y=AT90)) + geom_line(aes(x=DEPTH,y=AT90),size=1,alpha = 0.8) + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())
+gr2 <- ggplot(datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL=="YPF.NQ.RDM-184H",], aes(x=DEPTH_MTS, y=AT90)) + geom_line(aes(x=DEPTH_MTS,y=AT90),color="darkblue",size=1,alpha = 0.8) +ylim(0, 190)
+plot(grid.arrange(gr1, gr2, nrow = 2))
+
+#Suavización de curva para variable objetivo MN_XO_AD. Antes y luego de agrupar por metro
+#Pozo de ejemplo: YPF.NQ.RDM-184H
+pdf("suaviz_curva_MN.pdf")
+gr1 <- ggplot(datos_POZOS_DET[datos_POZOS_DET$WELL=="YPF.NQ.RDM-184H",], aes(x=DEPTH, y=MN_XO_AD)) + geom_line(aes(x=DEPTH,y=MN_XO_AD),size=1,alpha = 0.8) + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())
+gr2 <- ggplot(datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL=="YPF.NQ.RDM-184H",], aes(x=DEPTH_MTS, y=MN_XO_AD)) + geom_line(aes(x=DEPTH_MTS,y=MN_XO_AD),color="darkblue",size=1,alpha = 0.8) +ylim(1, 4)
+plot(grid.arrange(gr1, gr2, nrow = 2))
+dev.off()
+
+
+
+pdf("curva_suavizada_RDM_TODO.pdf")
+gr1 <- ggplot(datos_POZOS_DET[datos_POZOS_DET$WELL=="YPF.NQ.RDM-184H",], aes(x=DEPTH, y=MN_XO_AD)) + geom_line(aes(x=DEPTH,y=MN_XO_AD),size=1,alpha = 0.8) + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())
+gr2 <- ggplot(datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL=="YPF.NQ.LACH-24",], aes(x=DEPTH_MTS, y=MN_XO_AD)) + geom_line(aes(x=DEPTH_MTS,y=MN_XO_AD),color="darkblue",size=1,alpha = 0.8) +ylim(1, 4)
+gr3 <- grid.arrange(gr1, gr2, nrow = 2)
+gr3
+#ggsave(filename = "curvasuavizada_MNXO_TODO_SI", plot = gr3, device = "jpeg", path=NULL)
+#dev.off()
+
+
+```
+
+
+```{r}
+#Scatter plots + smooth
+#MN_XO_AD Vs. AT90
+pdf("scatter_MN_AT90_agr_recortada.pdf")
+plot <- ggplot(data=datos_GRP_POZO_DEPTH_TODO,aes(y=MN_XO_AD, x=AT90,colour=WELL, fill=WELL)) + #geom_text(label=datos_GRP_POZO_DEPTH$WELL,size=2,hjust=0,vjust=1) # + 
+  geom_point(alpha=0.7) + theme_bw()
+plot <- plot  + 
+  geom_smooth(method=loess, fill="red", color="red")  + 
+  geom_smooth(method=lm, fill="skyblue", color="skyblue") 
+plot
+dev.off()
+
+
+#Logaritmizada
+pdf("scatter_logartim_MN_AT90_recort.pdf")
+plot <- ggplot(data=datos_GRP_POZO_DEPTH_TODO,aes(y=MN_XO_AD, x=log(AT90),colour=WELL, fill=WELL)) + geom_point(alpha=0.7) + theme_bw()
+plot <- plot + geom_smooth(method=lm, fill="skyblue", color="skyblue") + #+ theme(legend.position="none")
+scale_size_continuous(range = c(1, 3))
+plot
+dev.off()
+#Agrego función logarítmica
+plot <- ggplot(data=datos_sin_cocina,aes(y=MN_XO_AD, x=AT90, colour = WELL)) + theme_bw() #+ geom_text(label=datos_sin_cocina$WELL)
+plot <- plot + geom_point(alpha=0.7) + 
+geom_smooth(method=loess, fill="red1", color="red1") +
+geom_smooth(method=lm,formula=y~log(x), fill="skyblue", color="skyblue")
+plot 
+
+#Scatter por pozo + smooth lm
+for (n in c(1:14)) {
+plot[[n]] <- ggplot(data=datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL==POZOS[n] ,],aes(y=MN_XO_AD, x=AT90)) + theme_bw()
+plot[[n]] <-  plot[[n]] + geom_point() + 
+geom_smooth(method=lm, fill="skyblue", color="skyblue") + xlab(POZOS[n]) +ylab("") + xlim(1.8,6) + ylim(1.75,3.4) 
+}
+plot[[1]]
+grid.arrange(plot[[1]],plot[[2]],plot[[3]],plot[[4]],plot[[5]],plot[[6]],plot[[7]],plot[[8]],plot[[9]],plot[[10]],plot[[11]],plot[[12]],plot[[13]],plot[[14]], nrow = 4)
+
+#Scatter por pozo (AT90) + smooth lm + log(x)
+pdf("detalle_MN_log_recorte.pdf")
+for (n in c(1:14)) {
+plot[[n]] <- ggplot(data=datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL==POZOS[n] ,],aes(y=MN_XO_AD, x=log(AT90))) + theme_bw() # + geom_point() + theme_bw()
+plot[[n]] <-  plot[[n]] + geom_point() + 
+geom_smooth(method=lm, fill="skyblue", color="skyblue") + xlab(POZOS[n]) +ylab("") #+ xlim(1.8,6) + ylim(1.75,3.4) 
+}
+plot[[1]]
+grid.arrange(plot[[1]],plot[[2]],plot[[3]],plot[[4]],plot[[5]],plot[[6]],plot[[7]],plot[[8]],plot[[9]],plot[[10]],plot[[11]],plot[[12]],plot[[13]],plot[[14]], nrow = 4)
+g1
+dev.off()
+
+#MN_XO_AD Vs. DEPTH_MTS
+pdf("MN_Vs_DEPTH_recortada.pdf")
+plot <- ggplot(data=datos_GRP_POZO_DEPTH_TODO, aes(y=MN_XO_AD, x=DEPTH_MTS,colour=WELL))
+plot <- plot + geom_point(alpha=0.7) + 
+geom_smooth(method=loess, fill="red", color="red")  + 
+geom_smooth(method=lm, fill="skyblue", color="skyblue")
+plot
+dev.off()
+
+#Scatter por pozo (DEPTH) + smooth lm
+pdf("detalle_MN_DEPTH.pdf")
+for (n in c(1:14)) {
+  plot[[n]] <- ggplot(data=datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL==POZOS[n] ,],aes(y=MN_XO_AD, x=DEPTH_MTS)) + theme_bw() + ylim(1.75,3.4) # + geom_point() + theme_bw()
+plot[[n]] <- plot[[n]] + geom_point() + 
+  geom_smooth(method=lm, fill="skyblue", color="skyblue")   + xlab(POZOS[n]) +ylab("")
+}
+g1 <- grid.arrange(plot[[1]],plot[[2]],plot[[3]],plot[[4]],plot[[5]],plot[[6]],plot[[7]],plot[[8]],plot[[9]],plot[[10]],plot[[11]],plot[[12]],plot[[13]],plot[[14]], nrow = 4)
+g1
+dev.off()
+
+#MN_XO_AD Vs. RO
+pdf("MN_Vs_RO.pdf")
+plot <- ggplot(data=datos_GRP_POZO_DEPTH_TODO,aes(y=MN_XO_AD, x=RO,colour=WELL)) 
+plot <- plot + geom_point(alpha=0.7) +
+geom_smooth(method=lm, fill="skyblue", color="skyblue") 
+plot
+dev.off()
+
+```
+
+
+```{r}
+#Boxplots train & test
+g1<-ggboxplot(train_POZO_DEPTH$MN_XO_AD,fill="skyblue",title="Train MN_XO_AD") +  ylim(1.75,3.4) + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.title.y=element_blank())
+g2<-ggboxplot(test_POZO_DEPTH$MN_XO_AD,fill="skyblue",title="Test MN_XO_AD")+ ylim(1.75,3.4) + theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.title.y=element_blank())
+g3 <- grid.arrange(g1,g2, nrow = 1)
+
+#ggsave(filename = "boxplots_train_test", plot = g3, device = "jpeg", path=NULL)
+```
+

@@ -1,0 +1,803 @@
+---
+title: "MN_Modelados"
+author: "JM"
+date: "December 26, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+root.dir="C:/Users/SE31886/Documents/Prediccion_MN/PROP_Y_ORGANICO"
+#librerias
+librerias <- c("dataPreparation", "corrplot","PerformanceAnalytics","reshape","sqldf","GGally","ggplot2","factoextra",
+               "psych","plotrix","REdaS","ppls","Metrics","grid","gridExtra","lmtest","nls2","e1071",
+               "glmnet","rpart","rpart.plot","caret","ggpubr","dplyr", "funModeling")
+
+invisible(lapply(librerias, library, character.only = TRUE))
+#Carga del parser de archivos .las
+source("C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\script\\MN_wrangling.R")
+```
+
+```{r}
+#PROYECTO MN.
+#Script de modelos. Incluye análisis multivariado  #Modificar datos_sin_cocina por el df conveniente
+
+#Análisis de Componentes principales. Variables agrupadas por metro
+#ENTERO
+pca_GRP_TODO <- prcomp(datos_GRP_POZO_DEPTH_TODO[,c(2:4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_TODO
+fviz_pca_var(pca_GRP_TODO,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
+
+#COCINA
+pca_GRP_Cocina <- prcomp(datos_GRP_POZO_DEPTH_soloC[,c(2:4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_Cocina
+fviz_pca_var(pca_GRP_Cocina,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE,     # Avoid text overlapping
+             title = "Variables PCA - COCINA"
+             )
+
+#NO COCINA
+pca_GRP_sinC <- prcomp(datos_GRP_POZO_DEPTH_sinC[,c(2:4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_sinC
+fviz_pca_var(pca_GRP_sinC,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE,     # Avoid text overlapping,
+             title = "Variables PCA - NO COCINA"
+             )
+
+
+
+#Gráfico de Eigenvalues. Muestra el porcentaje de variación explicado por cada dimensión            
+fviz_eig(pca_GRP_TODO, addlabels = TRUE)
+#Biplot circular
+fviz_pca_biplot(pca_GRP_TODO, label="var", habillage=datos_GRP_POZO_DEPTH_TODO$WELL,
+               addEllipses=TRUE, ellipse.level=0.95)
+
+#Análisis con variables promediadas y agrupadas por pozo. df -> POCIFICADO
+pca_GRP_TODO <- prcomp(POCIFICADO[,c(2,3,4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_TODO
+#Gráfico de individuos
+fviz_pca_ind(pca_GRP_TODO, label="var", habillage=POCIFICADO$WELL)
+#Biplot circular
+#pdf("PCA_circular_POCIFICADO.pdf")
+fviz_pca_biplot(pca_GRP, label="var", habillage=POCIFICADO$WELL,
+               addEllipses=TRUE, ellipse.level=0.95)
+#dev.off()
+```
+```{r}
+#NO COCINA
+pca_GRP_sinC <- prcomp(datos_GRP_POZO_DEPTH_sinC[,c(2:4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_sinC
+#jpeg("PCA_biplot_sinC.jpeg")
+fviz_pca_var(pca_GRP_sinC,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE,     # Avoid text overlapping
+             title = "Variables PCA - NO COCINA"  )
+#dev.off()
+#COCINA
+pca_GRP_soloC <- prcomp(datos_GRP_POZO_DEPTH_soloC[,c(2:4)],
+                 center = TRUE,
+                 scale = TRUE)
+pca_GRP_soloC
+#jpeg("PCA_biplot_soloC.jpeg")
+fviz_pca_var(pca_GRP,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping
+             title = "Variables PCA - COCINA" 
+             )
+#dev.off()
+```
+
+
+
+```{r}
+#Wrapper method: busqueda de features relevantes
+#Basado en Random Forest --> busca los features mas relevantes
+library(Boruta)
+set.seed(42)
+boruta.DATOS_TEST <- Boruta(MN_XO_AD ~ RO + AT90 + DEPTH_MTS,data = datos_GRP_POZO_DEPTH_TODO)
+#print(boruta.DATOS_TEST)
+#pdf("boruta_shadows.pdf")
+boruta_imp_plot <- plot(boruta.DATOS_TEST, las=2, cex.axis=0.75)
+boruta_imp_plot
+#dev.off()
+
+```
+
+
+```{r}
+#Clustering. Análisis multivariado
+library("factoextra")
+#Clustering ignorando la variable objetivo
+DATOS_CLUSTERING <- datos_GRP_POZO_DEPTH_TODO[,2:4]
+#Número de clusters
+fviz_nbclust(DATOS_CLUSTERING, kmeans, method = "wss") +
+geom_vline(xintercept = 4, linetype = 2)
+#k-means para k=4
+set.seed(42)
+km.res <- kmeans(DATOS_CLUSTERING, 4, nstart = 25)
+#tamaño de cluster
+km.res$size
+km.res
+km.res$cluster
+DATOS_Cluster <- cbind(WELL=datos_GRP_POZO_DEPTH_TODO[,1], DATOS_CLUSTERING, clusterKM = km.res$cluster)
+fviz_cluster(km.res, data = DATOS_CLUSTERING, geom = "point", pointsize = 1, ggtheme = theme_classic())
+#A qué cluster pertenece cada pozo?
+WELL_Cluster<-sqldf("select WELL, clusterKM, count(1) cuenta FROM DATOS_Cluster GROUP BY WELL, clusterKM ORDER BY WELL,count(1) DESC")
+WELL_Cluster_Final<-sqldf("SELECT a.WELL, a.clusterKM FROM WELL_Cluster a INNER JOIN (SELECT b.WELL, max(b.cuenta) cuenta FROM WELL_Cluster b GROUP BY b.WELL) c ON a.WELL=c.WELL and a.cuenta=c.cuenta")
+WELL_Cluster_Final
+```
+
+
+###
+```{r}
+#Preparacion de datos para ML: train_POZO_DEPTH (80%); test_POZO_DEPTH(20%); POZO_DEPTH_FULL(suma de ambos)
+#Train solo sobre los valores de cocina (modelo viejo). Test sobre el total.
+#df con variable AT90 recortada en 200 (PEDIDO DE ALBERTO)
+# datos_GRP_POZO_DEPTH_TODO  <- datos_GRP_POZO_DEPTH_TODO  %>% filter(AT90<=200)
+# datos_GRP_POZO_DEPTH_sinC  <- datos_GRP_POZO_DEPTH_sinC  %>% filter(AT90<=200) 
+# datos_GRP_POZO_DEPTH_soloC <- datos_GRP_POZO_DEPTH_soloC %>% filter(AT90<=200)
+
+set.seed(42)
+n       <- nrow(datos_GRP_POZO_DEPTH_TODO) #numero de rows en df
+muestra <- sample(n, n * .80)
+#Train df. Posterior logaritmacion
+train_POZO_DEPTH          <- datos_GRP_POZO_DEPTH_TODO[muestra, ]
+train_POZO_DEPTH_LOG      <- train_POZO_DEPTH
+train_POZO_DEPTH_LOG$AT90 <- log(train_POZO_DEPTH_LOG$AT90)
+
+#Test df. Posterior logaritmacion
+test_POZO_DEPTH           <- datos_GRP_POZO_DEPTH_TODO[-muestra, ]
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+
+
+
+####
+set.seed(42)
+n       <- nrow(datos_GRP_POZO_DEPTH_sinC) #numero de rows en df
+muestra <- sample(n, n * .80)
+#Train df. Posterior logaritmacion
+train_POZO_DEPTH          <- datos_GRP_POZO_DEPTH_sinC[muestra, ]
+train_POZO_DEPTH_LOG      <- train_POZO_DEPTH
+train_POZO_DEPTH_LOG$AT90 <- log(train_POZO_DEPTH_LOG$AT90)
+
+#Test df. Posterior logaritmacion
+test_POZO_DEPTH           <- datos_GRP_POZO_DEPTH_sinC[-muestra, ]
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+
+
+# ------
+##Para INTERVALOS DE CONFIANZA. Uso del 100% del dataset
+set.seed(42)
+#n       <- nrow(datos_GRP_POZO_DEPTH_soloC) #numero de rows en df
+#muestra <- sample(n, n * .80)
+#Train df. Posterior logaritmación
+train_POZO_DEPTH          <- datos_GRP_POZO_DEPTH_TODO
+train_POZO_DEPTH_LOG      <- train_POZO_DEPTH
+train_POZO_DEPTH_LOG$AT90 <- log(train_POZO_DEPTH_LOG$AT90)
+
+#Test df. Posterior logaritmación
+test_POZO_DEPTH           <- datos_GRP_POZO_DEPTH_TODO
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+##
+#------
+
+
+
+####ULTIMO MODELO TEST DE BALANCEO
+#Preparacion de datos para ML: 
+#train_POZO_DEPTH (80% COCINA + 80% NO COCINA); test_POZO_DEPTH(20% COCINA, 20% NO COCINA)
+set.seed(42)
+n         <- nrow(datos_GRP_POZO_DEPTH_sinC)  #numero de rows en NO COCINA
+c         <- nrow(datos_GRP_POZO_DEPTH_soloC) #numero de rows en COCINA
+muestra_n <- sample(n, n * .80)
+muestra_c <- sample(c, c * .80)
+training_sinC   <- datos_GRP_POZO_DEPTH_sinC[muestra_n, ]
+training_soloC  <- datos_GRP_POZO_DEPTH_soloC[muestra_c, ]
+testing_sinC    <- datos_GRP_POZO_DEPTH_sinC[-muestra_n, ]
+testing_soloC   <- datos_GRP_POZO_DEPTH_soloC[-muestra_c, ]
+
+training_sinC         <- training_sinC %>% mutate(COCINA = 0) #agrego la variable flag
+training_sinC$COCINA  <- as.factor(training_sinC$COCINA) #convierto en categorica
+training_soloC        <- training_soloC %>% mutate(COCINA = 1)
+training_soloC$COCINA <- as.factor(training_soloC$COCINA)
+testing_sinC          <- testing_sinC %>% mutate(COCINA = 0)
+testing_sinC$COCINA   <- as.factor(testing_sinC$COCINA)
+testing_soloC         <- testing_soloC %>% mutate(COCINA = 1)
+testing_soloC$COCINA  <- as.factor(testing_soloC$COCINA)
+
+#Train df. Posterior logaritmacion
+train_POZO_DEPTH          <- rbind(training_sinC , training_soloC)
+train_POZO_DEPTH_LOG      <- train_POZO_DEPTH
+train_POZO_DEPTH_LOG$AT90 <- log(train_POZO_DEPTH_LOG$AT90)
+
+#Test df. Posterior logaritmacion
+test_POZO_DEPTH           <- rbind(testing_sinC , testing_soloC)
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+
+#testing de nivel por separado
+test_POZO_DEPTH           <- testing_soloC
+test_POZO_DEPTH           <- testing_sinC
+#luego...
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+
+```
+###
+
+
+
+
+```{r}
+#Modelo de REGRESION LINEAL
+modelo_lin<-lm(MN_XO_AD ~  RO + AT90 + DEPTH_MTS, data = train_POZO_DEPTH_LOG)
+#Predictores sobre el training y el testing
+pr_train_modelo_lin <- predict(modelo_lin, train_POZO_DEPTH_LOG)
+pr_test_modelo_lin  <- predict(modelo_lin, test_POZO_DEPTH_LOG)
+#Cálculo de scoring en base a RMSE. 
+#library(Metrics)
+RMSE_modelo_lin_test  <- rmse(test_POZO_DEPTH_LOG$MN_XO_AD,pr_test_modelo_lin)
+RMSE_modelo_lin_train <- rmse(train_POZO_DEPTH_LOG$MN_XO_AD,pr_train_modelo_lin)
+RMSE_modelo_lin_test
+RMSE_modelo_lin_train
+summary(modelo_lin)
+
+#Comparación entre RMSEtest y RMSEtrain
+if (RMSE_modelo_lin_test>RMSE_modelo_lin_train) {
+  print("OVERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+}
+if (RMSE_modelo_lin_test<RMSE_modelo_lin_train) {
+  print("UNDERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+}
+
+#scatterplot regresión lineal
+#jpeg("regLin_sinC")
+#pdf("RegLin_sinC.pdf")
+modelo_lin_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_test_modelo_lin, x=MN_XO_AD, colour=WELL)) +
+geom_point(alpha=0.7) + theme_bw() +
+#geom_smooth(method=lm, fill="skyblue", color="skyblue") + 
+xlab("Medido") + ylab("Estimado Modelo") + ggtitle("Regresion lineal") +
+geom_line(data=test_POZO_DEPTH, aes(y=MN_XO_AD, x=MN_XO_AD), linetype=2)
+modelo_lin_plot
+#dev.off()
+summary(modelo_lin)
+
+#los residuos son normales?
+hist(residuals(modelo_lin))
+boxplot(residuals(modelo_lin))
+shapiro.test(residuals(modelo_lin)) #no es normal
+library(sjmisc)
+library(sjPlot)
+plot_model(modelo_lin, type = "diag") #graficos de diagnostico
+
+
+plot(modelo_lin)
+
+mean(residuals(modelo_lin))
+```
+
+
+```{r}
+#Modelo SVR
+set.seed(42)
+SVR_reggr <- train(form = MN_XO_AD ~ RO + AT90 + DEPTH_MTS, data = train_POZO_DEPTH, method="svmRadial")
+#Predictores
+pr_test_modelo_SVR  <- predict(SVR_reggr, test_POZO_DEPTH)
+pr_train_modelo_SVR <- predict(SVR_reggr, train_POZO_DEPTH)
+#Cálculo de scoring en base a RMSE
+RMSE_test_modelo_SVR <- rmse(test_POZO_DEPTH$MN_XO_AD,pr_test_modelo_SVR)
+RMSE_train_modelo_SVR <- rmse(train_POZO_DEPTH$MN_XO_AD,pr_train_modelo_SVR)
+RMSE_test_modelo_SVR
+RMSE_train_modelo_SVR
+#Comparación entre RMSEtest y RMSEtrain
+if (RMSE_test_modelo_SVR>RMSE_train_modelo_SVR) {
+  print("OVERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+}
+if (RMSE_test_modelo_SVR<RMSE_train_modelo_SVR) {
+  print("UNDERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+}
+
+#plot SVR
+#pdf("SVR_sinC.pdf")
+modelo_SVR_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_test_modelo_SVR, x=test_POZO_DEPTH$MN_XO_AD,colour=WELL)) + geom_point(alpha=0.7) + theme_bw()
+modelo_SVR_plot <- modelo_SVR_plot + xlab("Medido") + ylab("Estimado Modelo SVR") + ggtitle("SVR")
+modelo_SVR_plot <- modelo_SVR_plot + geom_line(data=test_POZO_DEPTH,aes(y=test_POZO_DEPTH$MN_XO_AD, x=test_POZO_DEPTH$MN_XO_AD), linetype=2) #+   geom_smooth(method=lm, fill="skyblue", color="skyblue") 
+modelo_SVR_plot
+#dev.off()
+
+plot(SVR_reggr)
+
+```
+
+
+```{r}
+#ARBOL DE REGRESION
+modelo_red_plt2 <- rpart( MN_XO_AD ~ RO + AT90 + DEPTH_MTS, data = train_POZO_DEPTH, minsplit=5)
+rpart.plot(modelo_red_plt2,extra=101, shadow.col="gray", compress = FALSE)
+#predictores
+pr_train_modelo_rpart <- predict(modelo_red_plt2,train_POZO_DEPTH)
+pr_test_modelo_rpart  <- predict(modelo_red_plt2,test_POZO_DEPTH)
+#Cálculo de scoring en base a RMSE
+RMSE_test_rpart  <- rmse(test_POZO_DEPTH$MN_XO_AD,  pr_test_modelo_rpart) 
+RMSE_train_rpart <- rmse(train_POZO_DEPTH$MN_XO_AD, pr_train_modelo_rpart)
+RMSE_test_rpart
+RMSE_train_rpart
+#scatterplot arbol regresión
+pdf("arbol_sinC.pdf")
+modelo_rpart_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_test_modelo_rpart, x=test_POZO_DEPTH$MN_XO_AD,colour=WELL)) +
+geom_point(alpha=0.7) + theme_bw() + xlab("Medido") + ylab("Estimado Modelo Arbol") +
+ggtitle("Arbol Regresión") + geom_line(data=test_POZO_DEPTH, aes(y=test_POZO_DEPTH$MN_XO_AD, x=test_POZO_DEPTH$MN_XO_AD), linetype=2)
+modelo_rpart_plot
+dev.off()
+summary(modelo_red_plt2)
+```
+
+
+```{r}
+#RANDOM FOREST
+#remocion de outliers
+#train_POZO_DEPTH_LOG <- train_POZO_DEPTH_LOG[-c(1980,2371,2596),]
+
+library(randomForest)
+#library(randomForestExplainer)
+rf <- randomForest(MN_XO_AD ~ RO + AT90 + DEPTH_MTS, data = train_POZO_DEPTH_LOG, do.trace = TRUE, localImp = TRUE, replace=TRUE, ntree=60)
+#plot(rf)
+#predictores
+pr_test_modelo_rf  <- predict(rf, test_POZO_DEPTH_LOG)
+#pr_train_modelo_rf <- predict(rf, train_POZO_DEPTH_LOG)
+#Cálculo de scoring en base a RMSE
+RMSE_test_rf  <- rmse(test_POZO_DEPTH$MN_XO_AD, pr_test_modelo_rf)
+#RMSE_train_rf <- rmse(train_POZO_DEPTH$MN_XO_AD, pr_train_modelo_rf)
+RMSE_test_rf
+#RMSE_train_rf
+#if (RMSE_test_rf>RMSE_train_rf) {
+#  print("UNDERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+#}
+#if (RMSE_test_rf<RMSE_train_rf) {
+#  print("OVERFITTING. (REVISAR SI LA DIFERENCIA ES SIGNIFICATIVA)")
+#}
+pdf("Rf_sinC.pdf")
+modelo_rf_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_test_modelo_rf, x=MN_XO_AD, colour=WELL)) + geom_point(alpha=0.7) + theme_bw()
+modelo_rf_plot <- modelo_rf_plot + xlab("Medido") + ylab("Estimado Modelo Ensamble") + ggtitle("Modelo Stacked Ensemble.\nTrain: 80% Cocina + 80% No Cocina.   Test: 20% Cocina + 20% No Cocina."  ) 
+modelo_rf_plot <- modelo_rf_plot + geom_line(data=test_POZO_DEPTH,aes(y=test_POZO_DEPTH$MN_XO_AD, x=test_POZO_DEPTH$MN_XO_AD), linetype=2) #+ geom_smooth(method = lm, fill="skyblue", color="skyblue")
+modelo_rf_plot
+dev.off()
+
+#gr?ficos de residuos
+fitted.values <- rf$predicted
+residuals <- fitted.values - rf$y
+plot(lm(residuals ~ fitted.values), which=c(1:6))
+plot(rf)
+
+rf_ri <- train_POZO_DEPTH_LOG$MN_XO_AD-predict(rf)
+plot(predict(rf),rf_ri)
+
+#DELTA
+#Numerar los metros dentro de un pozo
+# df_MTR_NRO <- sqldf('SELECT distinct WELL, DEPTH_MTS FROM pred_conversion_df') %>% 
+#               group_by(WELL) %>% 
+#               mutate(DELTA=row_number())
+
+
+# pred_conversion_df<-data.frame(pred_conversion_df,DELTA=df_MTR_NRO$DELTA)
+
+# write.csv(pred_conversion_df, "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\data\\pred_conversion_df_FULL28.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+#Modelo GAM
+#require(mgcv)
+model_GAM <- mgcv::gam(MN_XO_AD ~ s(RO) + s(AT90) + s(DEPTH_MTS), data = train_POZO_DEPTH)
+#Predictores
+pr_test_GAM <- predict(model_GAM,test_POZO_DEPTH)
+pr_train_GAM <- predict(model_GAM,train_POZO_DEPTH)
+#Cálculo de scoring en base a RMSE
+RMSE_train_GAM <- rmse(test_POZO_DEPTH$MN_XO_AD, pr_train_GAM)
+RMSE_test_GAM <- rmse(test_POZO_DEPTH$MN_XO_AD, pr_test_GAM)
+RMSE_train_GAM
+RMSE_test_GAM
+#Scatterplot
+modelo_GAM_plot <- ggplot(data=test_POZO_DEPTH, aes(y=pr_test_GAM, x=MN_XO_AD, colour=WELL)) + 
+geom_point(alpha=0.7) + theme_bw() + geom_smooth(method = lm, fill="skyblue", colour="skyblue") +
+xlab("Medido") + ylab("Estimado Modelo") + ggtitle("Generalised Additive model") +
+geom_line(data=test_POZO_DEPTH,aes(y=MN_XO_AD, x=MN_XO_AD), linetype=2)
+modelo_GAM_plot
+```
+
+###
+
+```{r}
+#H20
+library(h2o)
+h2o.shutdown(prompt = FALSE)
+h2o.init()
+#conversión a objetos "h20"
+train_GRP_POZO_DEPTH.hex  <- as.h2o(train_POZO_DEPTH)
+test_GRP_POZO_DEPTH.hex   <- as.h2o(test_POZO_DEPTH)
+#Split train en Train/Validation
+split_h2o      <- h2o.splitFrame(train_GRP_POZO_DEPTH.hex, c(0.85), seed = 42 )
+train_conv_h2o <- h2o.assign(split_h2o[[1]], "train" )
+valid_conv_h2o <- h2o.assign(split_h2o[[2]], "valid" )
+#Test
+test_conv_h2o  <- test_GRP_POZO_DEPTH.hex
+#Model
+# Seteo de variable dependiente e independientes
+target     <- "MN_XO_AD"
+predictors <- c("RO","DEPTH_MTS","AT90")
+# Run the automated machine learning (max: 1 hora)
+automl_h2o_models <- h2o.automl(
+    x = predictors,
+    y = target,
+    training_frame    = train_conv_h2o,
+    leaderboard_frame = valid_conv_h2o,
+    max_runtime_secs  = 3600
+    )
+
+#Extracción del mejor modelo, el "lider"
+automl_leader <- automl_h2o_models@leader
+#Guardado en disco
+h2o.saveModel(automl_leader,paste("C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\1MODELO_FINAL_FULL\\CON_IMPUTACION\\AAFINAL_100porCiento_ImputAT90_",format(Sys.time(), "%Y%m%d%H%M%S"),sep=""), force=TRUE)
+
+
+#... Cuando se desee volver a cargar (reemplazar por nombre del modelo que fue entrenado)
+#Modelo COCINA de Diego
+MODELO_A_CARGAR<-"C:\\Users\\SE31886\\Documents\\Prediccion_MN\\COCINA\\modelo\\PredMN_Cocina_20191219150448\\diegoGBM_grid_1_AutoML_20190206_152450_model_1"
+
+#Modelo FULL con flag de nivel "COCINA" incluido
+MODELO_A_CARGAR<-"C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\PredMN_TODOconFLAG_20200107195642\\TODOconFLAG_StackedEnsemble_BestOfFamily_AutoML_20200107_172324"
+
+#Modelo FULL con flag de nivel "COCINA" incluido + 8080 / 2020 (mejora del sampling)
+MODELO_A_CARGAR<-"C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\PredMN_FULLcSAMPLING_20200113110552\\FULL_cSampling_StackedEnsemble_AllModels_AutoML_20200113_101724"
+
+#Modelo NO COCINA, SIN flag de distinción de nivel (todos los valores del training son "0")
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\PredMN_sinC_20200102162325\\sinC_GBM_grid_1_AutoML_20200102_153217_model_45"
+
+#Modelo COCINA, SIN flag de distinción de nivel (todos los valores del training son "1")
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\PredMN_SOLOCOCINA_20200114120850\\StackedEnsemble_BestOfFamily_AutoML_20200114_085925"
+
+##
+#Modelo FULL2, CON flag de distincion de nivel. Corte MN en 2.8
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\28PredMN_FULL28_20200208222832\\StackedEnsemble_AllModels_AutoML_20200208_183025"
+
+
+#MODELOS DE INTERVALO DE CONFIANZA (100%)
+#FULL
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\MODELOS_INTERVALOS_CONFIANZA\\100porCiento_TODO_20200214204433\\TODO_StackedEnsemble_BestOfFamily_AutoML_20200214_195222"
+
+#COCINA
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\MODELOS_INTERVALOS_CONFIANZA\\100porCiento_COCINA_20200214161736\\COCINA_StackedEnsemble_BestOfFamily_AutoML_20200214_152156"
+
+#NO COCINA
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\MODELOS_INTERVALOS_CONFIANZA\\100porCiento_NO_COCINA_20200214185552\\NO_COCINA_StackedEnsemble_BestOfFamily_AutoML_20200214_174201" 
+
+#100% TODO con recorte de variable AT90. La variable COCINA no fue usada como predictora. Train 100%
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\MODELOS_INTERVALOS_CONFIANZA\\100porCiento_TODO_filtroAT90_20200313144912\\TODOfiltroAT90_StackedEnsemble_AllModels_AutoML_20200313_133832" 
+
+#ULTIMO USADO: 100% TODO con recorte de variable AT90. La variable COCINA no fue usada como predictora. Train 80%
+MODELO_A_CARGAR <- "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\100porCiento_TODO_filtroAT90_8020_20200316141234\\StackedEnsemble_AllModels_AutoML_20200316_132645" 
+
+
+#AAFINAL 8020 con recorte AT90
+MODELO_A_CARGAR<-"C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/AAFINAL_100porCiento_TODO_filtroAT90_8020_20200319163833/AAFINAL_8020_StackedEnsemble_AllModels_AutoML_20200319_152637"
+
+#AAFINAL 100% para IC con recorte AT90
+MODELO_A_CARGAR<-"C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/AAFINAL_100porCiento_TODO_filtroAT90_8020_20200319163833/AAFINAL_100porCiento_StackedEnsemble_BestOfFamily_AutoML_20200319_214902"
+
+#AAFINAL 100% para IC con imputacion AT90
+MODELO_A_CARGAR <- "C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/1MODELO_FINAL_FULL/CON_IMPUTACION/AAFINAL_100porCiento_ImputAT90_20200328133342/StackedEnsemble_AllModels_AutoML_20200328_105414"
+
+
+automl_leader <-h2o.loadModel(MODELO_A_CARGAR)
+
+
+#predictor
+pred_conversion    <- h2o.predict(object = automl_leader, newdata = test_conv_h2o)
+#Confusion matrix on test data set
+h2o.table(pred_conversion$predict, test_conv_h2o$converted)
+test_conv_h2o_df   <- as.data.frame(test_conv_h2o)
+pred_conversion_df <- as.data.frame(pred_conversion$predict)
+real<-as.data.frame(test_conv_h2o)
+pred_conversion_df <- data.frame(pred_conversion_df,real)
+
+#Numerar los metros dentro de un pozo (DELTA) (metodo alternativo)
+#pred_conversion_df <- pred_conversion_df  %>% group_by(WELL) %>% mutate(DELTA = DEPTH_MTS - min(DEPTH_MTS)) 
+
+#DELTA
+#Numerar los metros dentro de un pozo
+df_MTR_NRO <- sqldf('SELECT distinct WELL, DEPTH_MTS FROM pred_conversion_df') %>% 
+              group_by(WELL) %>% 
+              mutate(DELTA=row_number())
+pred_conversion_df<-data.frame(pred_conversion_df, DELTA=df_MTR_NRO$DELTA)
+
+
+
+#Validacion
+RMSE_modelo_h2o    <- rmse(test_conv_h2o_df$MN_XO_AD, pred_conversion_df$predict)
+RMSE_modelo_h2o
+#Scatterplot
+#jpeg("nuevo_scatter_H2o_FULLcFLAG_8080pozo.jpeg")
+reg_modelo_h2o     <- ggplot(data=test_conv_h2o_df,aes(y=pred_conversion_df$predict, x=test_conv_h2o_df$MN_XO_AD,colour=WELL)) +
+geom_point(alpha=0.7) + xlab("Medido") + ylab("Estimado Modelo") + ggtitle("Modelo Stacked Ensemble.\nTrain: 80% Cocina  Test: 20% Cocina") +
+geom_line(data=test_conv_h2o_df,aes(y=test_conv_h2o_df$MN_XO_AD, x=test_conv_h2o_df$MN_XO_AD), linetype=2) #+ geom_smooth(method = lm, colour="skyblue", fill="skyblue")
+reg_modelo_h2o
+#dev.off()
+
+#Exportacion de dataset en csv. 
+write.csv(pred_conversion_df, "C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\AAFINALpred_df_TODO_filtroAT90_100porCiento.csv", row.names = FALSE)
+
+#Mismo scatterplot, esta vez coloreado por COCINA VS NO COCINA
+#jpeg("nuevo_scatter_H2o_FULLcFLAG_8080color.jpeg")
+reg_modelo_h2o     <- ggplot(data=test_conv_h2o_df,aes(y=pred_conversion_df$predict, x=test_conv_h2o_df$MN_XO_AD,colour=COCINA)) +
+geom_point(alpha=0.7) + xlab("Medido") + ylab("Estimado Modelo") + ggtitle("Modelo Stacked Ensemble.\nTrain: 80% Cocina, 80% No Cocina  Test: 20% Cocina") +
+geom_line(data=test_conv_h2o_df,aes(y=test_conv_h2o_df$MN_XO_AD, x=test_conv_h2o_df$MN_XO_AD), linetype=1) #+ geom_smooth(method = lm, colour="skyblue", fill="skyblue")
+reg_modelo_h2o
+#dev.off()
+```
+
+
+
+
+```{r}
+#Modelos para 3 pozos. Comparación Cocina y no Cocina
+library(h2o)
+h2o.init()
+#conversión a objetos "h20"
+set.seed(42)
+n       <-nrow(datos_GRP_POZO_DEPTH_TODO) #numero de rows en df
+muestra <- sample(n, n * .70)
+#3 POZOS para gráficos cocina Vs No Cocina
+pozo_RDM  <- datos_GRP_POZO_DEPTH_TODO %>% filter(WELL == "YPF.NQ.RDM-184H")
+pozo_cav24  <- datos_GRP_POZO_DEPTH_TODO %>% filter(WELL == "YPF.NQ.LCAV-24")
+pozo_lach14 <- datos_GRP_POZO_DEPTH_TODO %>% filter(WELL == "YPF.NQ.LACH-14")
+
+#Test df. Posterior logaritmación
+#test_POZO_DEPTH          <- datos_GRP_POZO_DEPTH_sinC
+test_POZO_DEPTH           <- pozo_cav24
+test_POZO_DEPTH_LOG       <- test_POZO_DEPTH
+test_POZO_DEPTH_LOG$AT90  <- log(test_POZO_DEPTH_LOG$AT90)
+test_GRP_POZO_DEPTH.hex   <- as.h2o(test_POZO_DEPTH)
+test_conv_h2o             <- test_GRP_POZO_DEPTH.hex
+
+
+#... Cuando se desee volver a cargar (reemplazar por nombre del modelo que fue entrenado)
+MODELO_A_CARGAR<-"C:\\Users\\SE31886\\Documents\\Prediccion_MN\\PROP_ORGANICO\\modelo\\PredMN_TODOconFLAG_20200107195642\\TODOconFLAG_StackedEnsemble_BestOfFamily_AutoML_20200107_172324"
+automl_leader <-h2o.loadModel(MODELO_A_CARGAR)
+
+
+#predictor
+pred_conversion    <- h2o.predict(object = automl_leader, newdata = test_conv_h2o)
+#Confusion matrix on test data set
+h2o.table(pred_conversion$predict, test_conv_h2o$converted)
+test_conv_h2o_df   <- as.data.frame(test_conv_h2o)
+pred_conversion_df <- as.data.frame(pred_conversion$predict)
+real<-as.data.frame(test_conv_h2o)
+pred_conversion_df <- data.frame(pred_conversion_df,real)
+#Numerar los metros dentro de un pozo
+df_MTR_NRO <- sqldf('SELECT distinct WELL, DEPTH_MTS FROM pred_conversion_df') %>% 
+              group_by(WELL) %>% 
+              mutate(DELTA=row_number())
+
+pred_conversion_df<-data.frame(pred_conversion_df,DELTA=df_MTR_NRO$DELTA)
+
+#Validacion
+RMSE_modelo_h2o    <- rmse(test_conv_h2o_df$MN_XO_AD, pred_conversion_df$predict)
+RMSE_modelo_h2o
+#Scatterplot
+jpeg("H2O_FULL_ContrasteRDM_trabajo15.jpeg")
+reg_modelo_h2o     <- ggplot(data=test_conv_h2o_df, aes(y=pred_conversion_df$predict, x=test_conv_h2o_df$MN_XO_AD,colour=factor(COCINA))) +
+geom_point(alpha=0.7, size= 2) + xlab("Medido") + ylab("Estimado Modelo") + ggtitle("Modelo Stacked Ensemble. Train: set completo. Test: pozo RDM-184H")  +
+geom_line(data=test_conv_h2o_df,aes(y=test_conv_h2o_df$MN_XO_AD, x=test_conv_h2o_df$MN_XO_AD), linetype=2)
+
+reg_modelo_h2o
+dev.off()
+```
+
+
+
+
+```{r}
+#H20. Agrupacion por pozo y c?lculo de prediccion segun promedio de variables
+
+automl_leader <-h2o.loadModel(MODELO_A_CARGAR)
+
+GRP_POZO_DEPTH.hex      <- as.h2o(datos_GRP_POZO_DEPTH_TODO)
+pred_conversion_full    <- h2o.predict(object = automl_leader, newdata = GRP_POZO_DEPTH.hex)
+pred_conversion_full_df <- as.data.frame(pred_conversion_full$predict)
+#validacion
+RMSE_modelo_h2o_full  <- rmse(test_POZO_DEPTH$MN_XO_AD, pred_conversion_full_df$predict )
+#RMSE_modelo_h2o_full <- sqrt(sum((datos_GRP_POZO_DEPTH$MN_XO_AD - pred_conversion_full_df$predict)^2)/nrow(datos_GRP_POZO_DEPTH))
+RMSE_modelo_h2o_full
+#creación del df
+PARA_POCIFICAR  <- data.frame(WELL=datos_GRP_POZO_DEPTH_soloC$WELL,Real=datos_GRP_POZO_DEPTH_soloC$MN_XO_AD,Predict=pred_conversion_full_df,RO=datos_solo_cocina$RO,AT90=datos_GRP_POZO_DEPTH_soloC$AT90, DEPTH_MTS=datos_GRP_POZO_DEPTH_soloC$DEPTH_MTS)
+POCIFICADO      <- sqldf("SELECT WELL, AVG(RO) RO, AVG(AT90) AT90, AVG(DEPTH_MTS) DEPTH_MTS,AVG(Real) Real, AVG(Predict) Predict FROM PARA_POCIFICAR GROUP BY WELL")
+RMSE_POCIFICADO <- rmse(POCIFICADO$Real,POCIFICADO$Predict)
+RMSE_POCIFICADO
+#Scatterplot
+#jpeg("h2o_pocificado_FULL8080flag.jpeg")
+plot_pocificado <- ggplot(data=POCIFICADO,aes(y=POCIFICADO$Predict, x=POCIFICADO$Real,colour=WELL)) +
+geom_point(alpha=0.7, size=2) + theme_bw() + xlab("Medido") + ylab("Estimado Modelo") +
+ggtitle("Modelo Stacked Ensemble. Agrupación por pozo") + geom_line(data=POCIFICADO,aes(y=POCIFICADO$Real, x=POCIFICADO$Real), linetype=1) +
+geom_smooth(method = lm, fill="skyblue", colour="skyblue")
+plot_pocificado
+#dev.off()
+
+```
+
+
+```{r}
+#Maximum Likelihood Estimation
+library(mlogit)
+mldata           <- mlogit.data(train_POZO_DEPTH, choice="MN_XO_AD", shape="wide")
+modelo_mlogit    <- mlogit(formula=MN_XO_AD ~ 1 | RO + AT90 + DEPTH_MTS, data = mldata)
+#Predictor
+pr_modelo_mlogit <- predict(modelo_mlogit,test_POZO_DEPTH_LOG)
+#Score en base a RMSE
+RMSE_modelo_lin  <- rmse(test_POZO_DEPTH$MN_XO_AD,pr_modelo_lin)
+RMSE_modelo_lin
+#Scatterplot
+modelo_lin_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_modelo_lin, x=MN_XO_AD)) + geom_point() +
+xlab("Medido") + ylab("Estimado Modelo") + geom_line(data=test_POZO_DEPTH,aes(y=MN_XO_AD, x=MN_XO_AD), linetype=2) +
+theme(legend.text = element_text(size=8)) + theme(legend.background = element_rect(fill="gray95", linetype = "dotted"))
+modelo_lin_plot
+```
+
+```{r}
+#14 modelos. Iteracion de prediccion h20 por pozo. LEAVE ONE OUT
+library(h2o)
+h2o.shutdown(prompt = FALSE)
+duerme <- function(x)
+{
+    p1 <- proc.time()
+    Sys.sleep(x)
+    proc.time() - p1 # The cpu usage should be negligible
+}
+#Valor inicial RMSE y df vacío POCIFICADO_DIFF
+RMSE_modelo_h2o <- 0
+POCIFICADO_DIFF <- NULL
+#POCIFICADO_DIFF=data.frame(WELL="",pred=0,real=0)
+
+#Train: toma todos los pozos menos el iterado [i]. Test: todos los pozos restantes
+for (i in c(1:14)) {
+  print("------------------------------------------------------------")
+  print(i)
+  h2o.init()
+  train_GRP_POZO_DEPTH.hex  <- as.h2o(datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL!=POZOS[i],])
+  test_GRP_POZO_DEPTH.hex   <- as.h2o(datos_GRP_POZO_DEPTH_TODO[datos_GRP_POZO_DEPTH_TODO$WELL==POZOS[i],])
+    #Split del train en Train/Validation (80/20)
+  split_h2o      <- h2o.splitFrame(train_GRP_POZO_DEPTH.hex, c(0.8), seed = 42 )
+  train_conv_h2o <- h2o.assign(split_h2o[[1]], "train" ) 
+  valid_conv_h2o <- h2o.assign(split_h2o[[2]], "valid" ) 
+  #Test set
+  test_conv_h2o  <- test_GRP_POZO_DEPTH.hex
+  # Seteo de variable target y predictores
+  target     <- "MN_XO_AD"
+  predictors <- c("RO", "DEPTH_MTS", "AT90")
+  # Run the automated machine learning 
+  automl_h2o_models<- h2o.automl(
+      x = predictors,
+      y = target,
+      training_frame    = train_conv_h2o,
+      leaderboard_frame = valid_conv_h2o,
+      max_runtime_secs = 600
+      )
+  
+  # Extracción de leader model y guardado
+  automl_leader <- automl_h2o_models@leader
+  h2o.saveModel(automl_leader,   paste("C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/AAFINAL_100porCiento_TODO_filtroAT90_8020_20200319163833/LeaveOneOut/AAFINAL8020LeaveOneOut_14modelos_TODO_ConFiltroAt90_8020_",POZOS[i],format(Sys.time(), "%Y%m%d%H%M%S.csv",sep="")), force=TRUE)
+  # Predict on hold-out test set
+  pred_conversion <- h2o.predict(object = automl_leader, newdata = test_conv_h2o)
+  #Confusion matrix on test data set
+  h2o.table(pred_conversion$predict, test_conv_h2o$converted)
+  test_conv_h2o_df<-as.data.frame(test_conv_h2o)
+  pred_conversion_df<-as.data.frame(pred_conversion$predict)
+  #Score del modelo en base a RMSE
+  RMSE_modelo_h2o[i] <- rmse(test_conv_h2o$MN_XO_AD, pred_conversion$predict)  
+#RMSE_modelo_h2o[i] <- sqrt(sum((test_conv_h2o$MN_XO_AD - pred_conversion$predict)^2)/nrow(test_conv_h2o))
+  
+  #Scatterplot
+ # plot[[i]] <- ggplot(data=test_conv_h2o_df, aes(y=pred_conversion_df$predict, x=test_conv_h2o_df$MN_XO_AD)) +  
+ # geom_point(alpha=0.7,size=2, aes(colour=pred_conversion_df$predict)) +
+ # ggtitle(paste(test_conv_h2o_df$WELL," - RMSE: ",round(RMSE_modelo_h2o[i],4),sep="")) +
+ # xlab("Medido") + ylab("Estimado Modelo") + theme(legend.text = element_text(size=8)) +
+ # theme(legend.background = element_rect(fill="gray95", linetype = "dotted")) +
+ # geom_line(data=test_conv_h2o_df,aes(y=test_conv_h2o_df$MN_XO_AD, x=test_conv_h2o_df$MN_XO_AD), linetype=2) + theme(legend.position="none")
+ # print(plot[[i]])
+ # #Escritura en CSV
+  #write.csv(cbind(test_conv_h2o_df[,c(1:5)],pred_conversion_df$predict),paste("C:/Users/SE31886/Documents/Prediccion_MN/PROP_ORGANICO/modelo/PredMN_EXCLUSIVOsinC_",POZOS[i],format(Sys.time(), "%Y%m%d%H%M%S"),"_RMSE_",round(RMSE_modelo_h2o[i],4),".csv",sep=""))
+ #df final
+ POCIFICADO_DIFF <- rbind(POCIFICADO_DIFF, data.frame(WELL=POZOS[i],pred=mean(pred_conversion_df$predict),real=mean(test_conv_h2o_df$MN_XO_AD)))
+#POCIFICADO_DIFF
+ 
+  h2o.shutdown(prompt=FALSE)
+  duerme(20)
+}
+
+View(POCIFICADO_DIFF)
+
+```
+
+```{r}
+#Set de prueba para verificar modelos. Se testea sobre un subset artificial aleatorio, pero se puede modificar para testear sobre datos nuevos. h2o debe cerrarse luego de cada iteracion para no overfittear.
+
+h2o.init()
+set.seed(42)
+sample_test<-data.frame(
+AT90=runif(421, 3.713, 321.529),
+RO=runif(421,0.900,1.600),
+DEPTH_MTS=seq(2759,3179,1))
+
+sample_test.hex=as.h2o(sample_test)
+
+vector_modelos_h2o<-c('PredMN_LCAV-21_20190131170459/GBM_grid_1_AutoML_20190131_165524_model_11',
+'PredMN_LRI-6(H)_20190131172729/GBM_1_AutoML_20190131_172027',
+'PredMN_YPF.ADLA-1001(H)ST_20190131175619/DRF_1_AutoML_20190131_174840',
+'PredMN_YPF.NQ.EOR-31_20190131180419/GBM_grid_1_AutoML_20190131_175703_model_49',
+'PredMN_YPF.NQ.EOR-35D_20190131181313/GBM_grid_1_AutoML_20190131_180605_model_12',
+'PredMN_YPF.NQ.EOR-45_20190131182059/GBM_grid_1_AutoML_20190131_181351_model_8',
+'PredMN_YPF.NQ.LACH-14_20190131182848/GBM_grid_1_AutoML_20190131_182142_model_12',
+'PredMN_YPF.NQ.LACH-16_20190131185318/GBM_1_AutoML_20190131_184616',
+'PredMN_YPF.NQ.LACH-17_20190131200336/GBM_grid_1_AutoML_20190131_195631_model_14',
+'PredMN_YPF.NQ.LACH-24_20190131201533/GBM_grid_1_AutoML_20190131_200813_model_30',
+'PredMN_YPF.NQ.LLL-993_20190131202349/GBM_grid_1_AutoML_20190131_201643_model_11',
+'PredMN_YPF.NQ.LLL-997_20190131203221/GBM_1_AutoML_20190131_202514',
+'PredMN_YPF.NQ.RDM-184H_20190131204507/StackedEnsemble_BestOfFamily_AutoML_20190131_203803',
+'PredMN_YPF_NQ_LCAV-24(H)_20190131205250/GBM_grid_1_AutoML_20190131_204542_model_38')
+
+i=0
+for (modelo in vector_modelos_h2o) {
+  #cargo modelo
+  automl_leader_test<-h2o.loadModel(paste('C:/Users/jelorriaga/Documents/Prediccion_MN/modelos/prueba_sample/',modelo,sep=''))
+
+  #Prediccion
+  pred_conversion_test <- h2o.predict(object = automl_leader_test, newdata = sample_test.hex)
+  pred_conversion_test_df<-as.data.frame(pred_conversion_test$predict)
+  if (i==0) {
+    matriz_predict=pred_conversion_test_df
+    i=1
+  } else {
+  matriz_predict=cbind(matriz_predict,pred_conversion_test_df)}
+  
+}
+c(1:14,1:14)
+matriz_rmse=matrix(nrow=14,ncol=14)
+j=0
+k=0
+for (j in c(1:14)) {
+  for (k in c(1:14)){
+    matriz_rmse[j,k]=rmse(matriz_predict[,j],matriz_predict[,k])
+  }
+}
+
+write.csv(matriz_rmse,"matriz_rmse.csv")
+
+suppressWarnings(ggcorr(matriz_predict,size=3,label = TRUE,  label_size = 3, label_round = 2, label_alpha = TRUE, hjust = 1, size = 3) + ggtitle ("Correlaciones"))
+colnames(matriz_predict)=c(1:14)
+
+
+
+```
