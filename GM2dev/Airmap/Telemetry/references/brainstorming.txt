@@ -1,0 +1,29 @@
+# Ideas
+
+
+1. Comenzar presentando un tabulado analítico con las mediciones descriptivas para cada variables de la muestra.
+    Calculas las funciones de densidad, los boxplot, histogramas.
+    Es posible que haya que usar Spark para la población entera. El caso alternativo sería construir un script que levante las particiones
+    de a una, guarde el resultado y desaloque el subset de memoria para poder subir el siguiente.
+
+No olvidar responder las preguntas de MM: 
+    number of flights per day, 
+    lenght
+    location of flights
+    
+
+2. La información del punto anterior (1) se puede presentar en un dashboard dinámico que permite seleccionar a través de filtro de diverso
+    tipo la información que se quiere ver.
+
+3. Armar un mapa que, a través del uso de las coordenadas, geolocalice a cada drone por encima del mapa. Luego, que haya un filtro
+    que permite colorear los punto según las variables restantes (altitude, )
+    Adicional: dado que se posee el course action, este puede usarse para convertir los puntos en triángulos con dirección
+
+4. Adicion de fuentes externas: clima, zonas peligrosas
+
+5. Revisar:
+    PowerBI
+    Graphana
+    Folium
+    Dash
+    Alguna libreria dinamica en R (Shiny)

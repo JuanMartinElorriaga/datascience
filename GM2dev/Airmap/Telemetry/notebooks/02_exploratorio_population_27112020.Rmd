@@ -1,0 +1,266 @@
+---
+title: "02_exploratory_poulation_27112020"
+author: "JM"
+date: "11/28/2020"
+output: html_document
+---
+# Setup
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+mypath <- getwd()
+knitr::opts_knit$set(root.dir = dirname(mypath))
+
+# libraries
+librerias <- c("dplyr", "readr","corrplot","PerformanceAnalytics","reshape","sqldf","GGally","ggplot2","factoextra","psych","plotrix","Metrics","grid","gridExtra","rpart.plot","ggpubr","dplyr", "funModeling", "ggrepel", "data.table")
+invisible(lapply(librerias, library, character.only = TRUE))
+```
+
+# Load tsv file
+```{r load&format, echo=FALSE}
+DF_FINAL <- fread("./../data/interim/full_DB_26112020.tsv")
+DF_FINAL <- as.data.table(DF_FINAL)
+# Format factor variables
+DF_FINAL$year   <- factor(DF_FINAL$year, ordered = T)
+DF_FINAL$month  <- factor(DF_FINAL$month, ordered = T)
+DF_FINAL$day    <- factor(DF_FINAL$day, ordered = T)
+DF_FINAL$hour   <- factor(DF_FINAL$hour, ordered = T)
+DF_FINAL$minute <- factor(DF_FINAL$minute, ordered = T)
+DF_FINAL$second <- factor(DF_FINAL$second, ordered = T)
+# Date format for variable 'date'
+DF_FINAL$date <- as_date(DF_FINAL$date)
+# Time format for variable 'time
+DF_FINAL$time <- chron::chron(times. = DF_FINAL$time)
+```
+
+
+```{r compare track_id and callsign, echo=FALSE}
+# DONE: the variables shows all 1, so the are the same variable
+# DF_FINAL$compare_me <- ifelse(DF_FINAL$callsign==DF_FINAL$track_id, 1, 0)
+# table(DF_FINAL$compare_me)
+```
+
+# Exploratory plots
+## FunModeling
+### Status&Describe
+```{r Funmodeling}
+# NA's; type; unique values
+DF_status <- df_status(DF_FINAL)
+DF_stats <- as.data.frame(t(pastecs::stat.desc(DF_FINAL)))
+# Descriptive statistics by group
+library(psych)
+describe.by(DF_FINAL$ground_speed_meters_per_second, mat = T, group = "month")
+```
+
+### Histogramas
+```{r Histograms, echo=TRUE}
+# Subset only numeric and time variables, then plot
+DF_nums <- dplyr::select_if(DF_FINAL, is.numeric)
+plot_num(DF_nums) #, path_out = "")
+
+# individual histogram
+```
+
+
+```{r Outliers Detection, echo=TRUE}
+# for frequence, use .(count = .N)
+# ground speed 
+DF_FINAL[ground_speed_meters_per_second > 1000000, ]
+DF_FINAL$altitude_meters
+
+# altitude meters
+DF_FINAL[altitude_meters<0, ]
+
+
+# velocity
+DF_FINAL[velocity_x_meters_per_second<0, .(count = .N)]
+DF_FINAL[velocity_y_meters_per_second<0, .(count = .N)]
+DF_FINAL[velocity_z_meters_per_second<0, .(count = .N)]
+
+# vertical speed
+DF_FINAL[vertical_speed_meters_per_second>250, .(count = .N)]
+
+
+hist(DF_FINAL$ground_speed_meters_per_second)
+qplot(DF_FINAL$ground_speed_meters_per_second, geom="boxplot") 
+```
+
+### Est. Descriptiva
+```{r Descriptives}
+options(scipen=999) # disable scientific notation first
+# mean, stand dev, VC, percentiles, skewness, kurtosis
+prof_num <- profiling_num(DF_FINAL)
+```
+
+
+```{r categoricas}
+freq(DF_FINAL) #d only applies for categorical variables
+```
+
+## Boxplots
+```{r}
+boxp_ground_speed <-ggplot(DF_FINAL, aes(x=month, y=ground_speed_meters_per_second, fill=ground_speed_meters_per_second)) +
+  geom_boxplot(notch  = TRUE) + coord_flip() + ggtitle("Boxplot: ")
+bxp_s_agr_AT90_NC
+```
+
+
+## Correlations
+```{r}
+correlation_table(DF_FINAL, "ground_speed_meters_per_second")
+correlation_table(DF_FINAL, "vertical_speed_meters_per_second")
+correlation_table(DF_FINAL, "altitude_meters")
+
+# Dynamic correlation heatmap (libraries: plotly, heatmaply and ggcorrplot)
+
+## Replacing Na by 0
+DF_heatmap <- DF_FINAL
+is.na(DF_heatmap) <- sapply(DF_heatmap, is.infinite)
+DF_heatmap[is.na(DF_heatmap)] <- 0
+DF_heatmap[is.nan(DF_heatmap)] <- 0
+
+library(heatmaply)
+heatmaply_cor(
+  cor(DF_nums),
+  xlab = "Features", 
+  ylab = "Features",
+  k_col = 2, 
+  k_row = 2
+)
+
+sum(is.infinite(DF_FINAL))
+
+# NOTES:
+#   altitude meters shows high correlation with: longitude_degrees and ground speed
+
+
+```
+
+# New datasets based on aggrupations
+```{r flights per unit of time}
+# IF every flight has a unique track_id, then these DF show the amount of flights per hour, date and month
+DF_trackid_month <- sqldf(" SELECT month, COUNT(*) AS flights_per_month FROM (
+                          SELECT track_id, month, count(*) FROM DF_FINAL GROUP BY track_id, month) 
+                          GROUP BY month")
+
+DF_trackid_date<- sqldf(" SELECT date, COUNT(*) AS flights_per_date FROM (
+                          SELECT track_id, date, count(*) FROM DF_FINAL GROUP BY track_id, date) 
+                          GROUP BY date")
+
+DF_trackid_hour <- sqldf(" SELECT hour, COUNT(*) AS flights_per_hour FROM (
+                          SELECT track_id, hour, count(*) FROM DF_FINAL GROUP BY track_id, hour) 
+                          GROUP BY hour")
+
+
+
+# graph of number of flights per hour of the day
+plot_FlightPerHour <-  ggplot(DF_trackid_hour, aes(hour, group=1))  + 
+        #geom_line(aes(y = flights_per_hour, colour = flights_per_hour), alpha = .5) +
+        geom_point(aes(y = flights_per_hour, colour = flights_per_hour, alpha = .2))  +
+        labs(x = "Hour of the day", y = "Number of flights", 
+        title = "Number of flights per hour of the day") + 
+        geom_smooth(aes(y = flights_per_hour, colour = flights_per_hour), method="loess", se=T) +
+        theme_minimal() + theme(legend.position = "none")
+
+
+# graph of number of flights per month
+plot_FlightPerDate <-  ggplot(DF_trackid_date, aes(date, group=1))  + 
+        #geom_line(aes(y = flights_per_date, colour = flights_per_date), alpha = .5) +
+        geom_point(aes(y = flights_per_date, colour = flights_per_date, alpha = .2))  +
+        labs(x = "date", y = "Number of flights", 
+        title = "  Number of flights per month \n  Year: 2020") + 
+        geom_smooth(aes(y = flights_per_date, colour = flights_per_date), method="loess", se=T) +
+        theme_minimal() + theme(legend.position = "none") + 
+        scale_x_date(date_breaks = "1 month", date_labels = "%b") 
+
+
+
+
+
+
+DF_CLEAN <- DF_FINAL[altitude_meters<500 & altitude_meters>-50 , ]
+
+# Plot
+ggplot(DF_CLEAN, aes(latitude_degrees)) + 
+    geom_density(aes(fill= month), alpha=0.8) + 
+    labs(title="Density plot", 
+         subtitle="City Mileage Grouped by Number of cylinders",
+         caption="Source: mpg",
+         x="City Mileage",
+         fill="# Cylinders")
+
+DF_FINAL[altitude_meters<500, altitude_meters]
+```
+
+## Distances and displacement
+```{r ditances}
+# To calculate the displacement, I first need to take the first and final row for each flight (group by track_id)
+# MAX 'OBSERVED' VALUE FOR EACH TRACK_ID
+Max_observed_trackId <- sqldf("SELECT track_id, latitude_degrees AS max_latitude_degrees, 
+                              longitude_degrees as max_longitude_degrees, observed as max_observed
+                              FROM (SELECT track_id, latitude_degrees, longitude_degrees, observed, 
+                              ROW_NUMBER() OVER(PARTITION BY track_id ORDER BY track_id, observed DESC) AS RowNumber 
+                              FROM DT_FINAL)
+                              WHERE RowNumber = 1")
+
+# MIN 'OBSERVED' VALUE FOR EACH TRACK_ID
+Min_observed_trackId <- sqldf("SELECT track_id, latitude_degrees AS min_latitude_degrees, 
+                              longitude_degrees as min_longitude_degrees, observed as min_observed
+                              FROM (SELECT track_id, latitude_degrees, longitude_degrees, observed, 
+                              ROW_NUMBER() OVER(PARTITION BY track_id ORDER BY track_id, observed ASC) AS RowNumber 
+                              FROM DT_FINAL)
+                              WHERE RowNumber = 1")
+
+# I join both DF into a single one
+MinMax_observed_trackId <- merge(x = Max_observed_trackId, y = Min_observed_trackId, by = "track_id")
+
+
+# Then, I create "longlat" variable to calculate the distance between max and min coordinate for each row
+```
+
+## PCA
+```{r PCA}
+library("FactoMineR")
+
+
+
+```
+
+
+
+
+```{r Distance between coordinates}
+# use of sp library for spatial data (https://cran.r-project.org/web/packages/sp/sp.pdf)
+# use of geosphere for spatial data ()
+library(sp)
+max(sample_track$observed) - min(sample_track$observed) 
+COPIA <- DT_FINAL
+prueba <- sample_track[, Delta_time_flight := difftime(max(observed), min(observed)), by = track_id]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
