@@ -1,5 +1,4 @@
 #rellenar .zshrc con este script para adherir personalizaciones
-
 #alias
 alias ll='ls -l --color=auto'
 alias showip="ifconfig"
@@ -11,6 +10,9 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 alias .....='cd ../../../..'
+alias vscode="open -a Visual\ Studio\ Code.app"
+alias subl="open -a /Applications/Sublime\ Text.app"
+
 
 # Find and set branch name var if in git repository.
 function git_branch_name()
