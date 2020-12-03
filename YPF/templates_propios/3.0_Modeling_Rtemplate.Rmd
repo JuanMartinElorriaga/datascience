@@ -1,0 +1,378 @@
+---
+title: "2.0_Modelados_Rtemplate.Rmd"
+author: "JM"
+date: "11/13/2020"
+output: html_document
+---
+
+# Settings & Importacion de librerias 
+```{r setup, include=FALSE, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+# insertar vector de librerias a usar (modeling)
+librerias <- c("caret", "dataPreparation")
+invisible(lapply(librerias, library, character.only = TRUE))
+```
+
+# Carga de archivos externos
+```{r}
+#source(PATH)
+```
+
+# Algoritmos 
+## Regresion Lineal
+### Calculo de Regr.Lineal
+```{r}
+#Modelo de REGRESION LINEAL
+regr_lineal <- lm(var_target ~  x1 + x2 + ..., data = X_train)
+
+# Predictores sobre base test
+pred_regr_lineal <- predict(regr_lineal, X_test)
+
+#Cálculo de scoring en base a RMSE. 
+#library(Metrics)
+RMSE_regr_lineal      <- rmse(test_POZO_DEPTH_LOG$MN_XO_AD,pred_regr_lineal)
+RMSE_regr_lineal
+
+summary(regr_lineal)
+```
+
+### Ploteo de Regr.Lineal
+```{r}
+# Scatterplot
+#pdf("regr_lineal.pdf")
+regr_lineal_scatter <- ggplot(data=X_test, aes(y=y_test, x=X_test, colour=var)) +
+geom_point(alpha=0.7) + 
+theme_bw() +
+#geom_smooth(method=lm, fill="skyblue", color="skyblue") + 
+xlab("Real") + ylab("Estimacion Regresion Lineal") + ggtitle("Regresion lineal") +
+geom_line(data= X_test, aes(y= var_target, x=var_target), linetype=2)
+regr_lineal_scatter
+#dev.off()
+```
+
+### Analisis de residuos
+```{r}
+library(sjmisc)
+library(sjPlot)
+hist(residuals(regr_lineal))
+boxplot(residuals(regr_lineal))
+# Test de Shapiro
+shapiro.test(residuals(regr_lineal))
+plot_model(regr_lineal, type = "diag") #graficos de diagnostico
+plot(regr_lineal)
+mean(residuals(regr_lineal))
+```
+
+## SVR
+### Calculo de SVR
+```{r}
+# SVR
+set.seed(42)
+SVR_regr <- train(form = var_target ~ x1 + x2 + ..., data = X_train, method="svmRadial")
+
+#Predictores
+pred_SVR_regr  <- predict(SVR_regr, y_test)
+
+#Cálculo de scoring en base a RMSE
+RMSE_SVR_regr <- rmse(test_POZO_DEPTH$MN_XO_AD, pred_SVR_regr)
+RMSE_SVR_regr
+```
+
+### Ploteo de SVR
+```{r}
+#plot SVR
+#pdf("SVR_sinC.pdf")
+SVR_regr_plot <- ggplot(data=x_test, aes(y=pr_test_SVR, x=y_test$var_target, colour=var1)) + geom_point(alpha=0.7) + theme_bw() +
+xlab("Medido") + ylab("Estimacion SVR") + ggtitle("SVR") +
+geom_line(data=X_test, aes(y=y_test, x=y_test), linetype=2) 
+#+   geom_smooth(method=lm, fill="skyblue", color="skyblue") 
+SVR_regr_plot
+#dev.off()
+plot(SVR_regr)
+```
+
+## Arbol de Regresion
+### Calculo de Arbol
+```{r}
+#ARBOL DE REGRESION
+modelo_red_plt2 <- rpart( MN_XO_AD ~ RO + AT90 + DEPTH_MTS, data = train_POZO_DEPTH, minsplit=5)
+rpart.plot(modelo_red_plt2,extra=101, shadow.col="gray", compress = FALSE)
+# Predictores
+pr_train_modelo_rpart <- predict(modelo_red_plt2,train_POZO_DEPTH)
+pr_test_modelo_rpart  <- predict(modelo_red_plt2,test_POZO_DEPTH)
+# Calculo de scoring en base a RMSE
+RMSE_test_rpart  <- rmse(test_POZO_DEPTH$MN_XO_AD,  pr_test_modelo_rpart) 
+RMSE_train_rpart <- rmse(train_POZO_DEPTH$MN_XO_AD, pr_train_modelo_rpart)
+RMSE_test_rpart
+RMSE_train_rpart
+# Scatterplot arbol regresión
+pdf("arbol_sinC.pdf")
+modelo_rpart_plot <- ggplot(data=test_POZO_DEPTH,aes(y=pr_test_modelo_rpart, x=test_POZO_DEPTH$MN_XO_AD,colour=WELL)) +
+geom_point(alpha=0.7) + theme_bw() + xlab("Medido") + ylab("Estimado Modelo Arbol") +
+ggtitle("Arbol Regresión") + geom_line(data=test_POZO_DEPTH, aes(y=test_POZO_DEPTH$MN_XO_AD, x=test_POZO_DEPTH$MN_XO_AD), linetype=2)
+modelo_rpart_plot
+dev.off()
+summary(modelo_red_plt2)
+```
+
+## Random Forest
+### Calculo de Random Forest
+```{r}
+#RANDOM FOREST
+#library(randomForest)
+#library(randomForestExplainer)
+rf_regr <- randomForest(var_target ~ x1 + x2 + ..., data = X_train, do.trace = TRUE, localImp = TRUE, replace=TRUE, ntree=60) # reemplazar N por cantidad de arboles
+
+# Predictores
+pred_rf_regr  <- predict(rf_regr, y_test)
+
+# Calculo de scoring en base a RMSE
+RMSE_rf_regr  <- rmse(y_test, pred_rf_regr)
+RMSE_rf_regr
+```
+
+### Ploteo de Random Forest
+```{r}
+#pdf("Rf_sinC.pdf")
+rf_regr_plot <- ggplot(data=y_test, aes(y=pred_rf_regr, x=var_target, colour=var1)) + geom_point(alpha=0.7) + theme_bw() +
+xlab("Medido") + ylab("Estimacion RF") + ggtitle("Modelo Random Forest.\nTrees = N") + geom_line(data=y_test, aes(y=y_test, x=y_test), linetype=2) #+ geom_smooth(method = lm, fill="skyblue", color="skyblue")
+rf_regr_plot
+#dev.off()
+```
+
+### Analisis de residuos
+```{r}
+#graficos de residuos
+fitted.values <- rf_regr$predicted
+residuals <- fitted.values - rf_regr$y
+plot(lm(residuals ~ fitted.values), which=c(1:6))
+plot(rf_regr)
+rf_ri <- y_test - predict(rf_regr)
+plot(predict(rf_regr), rf_ri)
+```
+
+## GAM
+### Calculo GAM
+```{r}
+# GAM
+# library(mgcv)
+GAM_regr <- gam(var_target ~ s(x1) + s(x2) + s(...), data = X_train)
+#Predictores
+pred_GAM_regr  <- predict(GAM_regr, y_test)
+
+#Cálculo de scoring en base a RMSE
+RMSE_test_GAM <- rmse(y_test, pred_GAM_regr)
+RMSE_test_GAM
+```
+
+### Ploteo GAM
+```{r}
+#Scatterplot
+GAM_regr_plot <- ggplot(data=y_test, aes(y=pred_GAM_regr, x=va_target, colour=WELL)) + 
+geom_point(alpha=0.7) + theme_bw() + geom_smooth(method = lm, fill="skyblue", colour="skyblue") +
+xlab("Medido") + ylab("Estimacion GAM") + ggtitle("Generalised Additive model") +
+geom_line(data=y_test,aes(y=var_target, x=var_target), linetype=2)
+GAM_regr_plot
+```
+
+## Maximum Likelihood Estimation
+### Calculo de MLE
+```{r}
+# Maximum Likelihood Estimation
+library(mlogit)
+mldata           <- mlogit.data(X_train, choice="var_target", shape="wide")
+modelo_mlogit    <- mlogit(formula=var_target  ~ 1 | x1 + x2 + ..., data = mldata)
+
+#Predictor
+pred_mlogit_regr <- predict(modelo_mlogit, y_test)
+
+#Score en base a RMSE
+RMSE_mlogit_regr <- rmse(y_test, pred_mlogit_regr)
+RMSE_mlogit_regr
+```
+
+### Ploteo de MLE
+```{r}
+#Scatterplot
+mlogit_regr_plot <- ggplot(data=y_test, aes(y=pred_mlogit_regr, x=var_target)) + geom_point() +
+xlab("Medido") + ylab("Estimacion MLE") + 
+geom_line(data=test_POZO_DEPTH,aes(y=var_target, x=var_target), linetype=2) +
+theme(legend.text = element_text(size=8)) + 
+theme(legend.background = element_rect(fill="gray95", linetype = "dotted"))
+mlogit_regr_plot
+```
+
+
+# AutoML
+## H2o
+### Setup H2o
+```{r}
+# H2o
+# Nota: es importante reiniciar el kernel para limpiar el cache. Sino se puede generar overfitting
+library(h2o)
+h2o.shutdown(prompt = FALSE) # apagar sistema
+h2o.init() # iniciar sistema
+```
+
+### Pre-processing H2o
+```{r}
+# Conversion a objetos "H2o"
+Train_H2o.hex  <- as.h2o(X_train)
+Test_H2o.hex   <- as.h2o(X_test)
+
+#Split train en Train/Validation
+split_h2o      <- h2o.splitFrame(Train_H2o.hex, c(0.85), seed = 42)
+train_conv_h2o <- h2o.assign(split_h2o[[1]], "train")
+valid_conv_h2o <- h2o.assign(split_h2o[[2]], "valid")
+
+#Test
+test_conv_h2o  <- Test_H2o.hex
+
+# Modelo
+# Seteo de variable dependiente e independientes
+target     <- "var_target"
+predictors <- c("x1","x2","...")
+```
+
+### Corrida AutoML H2o
+```{r}
+# Corrida de AutoML
+automl_h2o_models <- h2o.automl(
+    x = predictors,
+    y = target,
+    training_frame    = train_conv_h2o,
+    leaderboard_frame = valid_conv_h2o,
+    max_runtime_secs  = 3600 # limite de tiempo (3600 = 1 hora)
+    )
+```
+
+### Leader model H2o
+```{r}
+# Extracción del mejor modelo, el "lider"
+automl_leader <- automl_h2o_models@leader
+automl_leader
+```
+
+### Guardado en disco leader H2o
+```{r}
+#Guardado en disco (con timestamp)
+h2o.saveModel(automl_leader, paste("PATH_", format(Sys.time(), "%Y%m%d%H%M%S"), sep=""), force=TRUE)
+```
+
+### Carga de modelo leader H2o
+```{r}
+# Cuando se desee volver a cargar (reemplazar por nombre del modelo que fue entrenado)
+MODELO_A_CARGAR <- "PATH_modelo"
+automl_leader   <- h2o.loadModel(MODELO_A_CARGAR)
+```
+
+### Calculo de pred leader H2o
+```{r}
+# Predictor (uso el leader para predecir en test)
+pred_conversion    <- h2o.predict(object = automl_leader, newdata = test_conv_h2o)
+
+# Asignacion de variables
+h2o.table(pred_conversion$predict, test_conv_h2o$converted)
+test_conv_h2o_df   <- as.data.frame(test_conv_h2o)
+pred_conversion_df <- as.data.frame(pred_conversion$predict)
+real               <- as.data.frame(test_conv_h2o)
+pred_conversion_df <- data.frame(pred_conversion_df, real)
+
+#Validacion RMSE
+RMSE_modelo_h2o <- rmse(test_conv_h2o_df$target, pred_conversion_df$predict)
+RMSE_modelo_h2o
+```
+
+### Ploteo de pred leader H2o
+```{r}
+# Scatterplot
+#jpeg("nuevo_scatter_H2o_FULLcFLAG_8080pozo.jpeg")
+reg_modelo_h2o <- ggplot(data=test_conv_h2o_df, aes(y=pred_conversion_df$predict, x=test_conv_h2o_df$target, colour=WELL)) +
+geom_point(alpha=0.7) + 
+xlab("Medido") + ylab("Estimacion Modelo H2o") + ggtitle("Modelo H2o.\n") +
+geom_line(data=test_conv_h2o_df, aes(y=test_conv_h2o_df$target, x=test_conv_h2o_df$target), linetype=2) #+ geom_smooth(method = lm, colour="skyblue", fill="skyblue")
+reg_modelo_h2o
+#dev.off()
+```
+
+### Exportacion prediccion
+```{r}
+#Exportacion de dataset en csv. 
+write.csv(pred_conversion_df, "PATH.csv", row.names = FALSE)
+```
+
+### Validacion LEAVE ONE OUT (opcional)
+```{r}
+# Iteracion de prediccion h20 por categoria de variable. LEAVE ONE OUT
+library(h2o)
+h2o.shutdown(prompt = FALSE)
+duerme <- function(x)
+{
+    p1 <- proc.time()
+    Sys.sleep(x)
+    proc.time() - p1 # The cpu usage should be negligible
+}
+
+#Valor inicial RMSE y df vacío para rellenar con resultados
+RMSE_modelo_h2o <- 0
+DF_diff <- NULL
+
+# Train: toma todas las categorias menos la iterada [i]. Test: todas las categorias restantes
+# Nota: el loop prende y apaga el servidor para evitar overfitting
+for (i in c(1:length("LISTA_DE_CATEGORIAS"))) {
+  print("------------------------------------------------------------")
+  print(i)
+  h2o.init()
+  # Conversion de objetos
+  Train_H2o.hex  <- as.h2o(df[df$var_categorica!=POZOS[i],])
+  Test_H2o.hex   <- as.h2o(df[df$var_categorica==POZOS[i],])
+  
+  #Split del train en Train/Validation (80/20)
+  split_h2o      <- h2o.splitFrame(Train_H2o.hex, c(0.8), seed = 42)
+  train_conv_h2o <- h2o.assign(split_h2o[[1]], "train") 
+  valid_conv_h2o <- h2o.assign(split_h2o[[2]], "valid") 
+  #Test set
+  test_conv_h2o  <- Test_H2o.hex
+  
+  # Seteo de variable target y predictores
+  target     <- "var_target"
+  predictors <- c("x1", "x2", "...")
+  
+  # Corrida de AutoML 
+  automl_h2o_models<- h2o.automl(
+      x = predictors,
+      y = target,
+      training_frame    = train_conv_h2o,
+      leaderboard_frame = valid_conv_h2o,
+      max_runtime_secs = 600 # tiempo limite por loop
+      )
+  
+  # Extracción de leader model y guardado
+  automl_leader <- automl_h2o_models@leader
+  h2o.saveModel(automl_leader, paste("PATH_LEAVEONEOUT_", POZOS[i], format(Sys.time(), "%Y%m%d%H%M%S.csv", sep="")), force=TRUE)
+  
+  # Prediccion en hold-out test set (validacion)
+  pred_conversion <- h2o.predict(object = automl_leader, newdata = test_conv_h2o)
+  
+  #Asignacion de variables
+  h2o.table(pred_conversion$predict, test_conv_h2o$converted)
+  test_conv_h2o_df   <- as.data.frame(test_conv_h2o)
+  pred_conversion_df <- as.data.frame(pred_conversion$predict)
+  
+  #Score del modelo en base a RMSE (una por iteracion)
+  RMSE_modelo_h2o[i] <- rmse(test_conv_h2o$target, pred_conversion$predict)  
+
+  # Concateno resultados de cada iteracion en un dataframe
+  DF_diff <- rbind(DF_diff, data.frame(WELL=POZOS[i], pred=mean(pred_conversion_df$predict), real=mean(test_conv_h2o_df$target)))
+  
+# Apago el servidor para evitar overfitting
+  h2o.shutdown(prompt=FALSE)
+  duerme(10)
+}
+```
+
+#### Resultado final LEAVE ONE OUT
+```{r}
+# Resultado DF final
+DF_diff
+```

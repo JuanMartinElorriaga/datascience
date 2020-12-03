@@ -1,0 +1,145 @@
+---
+title: "Janitor_base"
+author: "JM"
+date: "11/13/2020"
+output: html_document
+  toc: true
+  theme: united
+  highlight: tango
+  number_sections: true
+  keep_md: false
+  #md_extensions: 
+---
+
+# Settings & Importacion de librerias 
+```{r setup, include=FALSE, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+# insertar vector de librerias a usar (wrangling)
+librerias <- c("corrplot","PerformanceAnalytics","reshape","sqldf","GGally","ggplot2","factoextra",
+               "psych","plotrix","REdaS","ppls","Metrics","grid","gridExtra","lmtest","nls2","e1071",
+               "glmnet","rpart","rpart.plot","caret","ggpubr","dplyr", "funModeling")
+invisible(lapply(librerias, library, character.only = TRUE))
+```
+
+# Carga de archivos externos
+```{r}
+#source(PATH)
+```
+
+# Preparacion de dataset
+## Train & Test
+```{r}
+# uso de libreria dataPreparation para separacion de dataset
+# NOTA: dividir set antes de pre-procesar para evitar sesgos de info
+# 80%-20%
+train_index <- sample(1:nrow(df), 0.8 * nrow(df))
+test_index  <- setdiff(1:nrow(df), train_index)
+
+# X_train, y_train, X_test, y_test
+X_train <- df[train_index, -15]
+y_train <- df[train_index, "var_target"]
+
+X_test <- df[test_index, -15]
+y_test <- df[test_index, "var_target"]
+```
+
+## Conversiones
+```{r}
+# categorica
+df$variable <- as.factor(df$variable)
+# numerica
+df$variable <- as.numeric(df$variable)
+# dataframe
+df$variable <- as.data.frame(df$variable)
+# date
+df$variable <- as.Date(df$variable)
+# vector
+df$variable <- as.vector(df$variable)
+#string
+df$variable <- as.character(df$variable)
+```
+
+## Filtrado variables irrelevantes
+### Vars constantes
+```{r}
+constant_cols <- which_are_constant(df)
+```
+
+### Vars duplicadas
+```{r}
+double_cols <- which_are_in_double(df)
+```
+
+### Vars con biyeccion perfecta
+```{r}
+bijections_cols <- which_are_bijection(df)
+```
+
+## Scaling
+```{r}
+# Nota: aplicar mismo scaling tanto a train como test (build en train)
+scales <- build_scales(data_set = X_train, cols = c("capital_gain", "capital_loss"), verbose = TRUE)
+# Aplicacion de scaling en train y luego en test
+X_train <- fast_scale(data_set = X_train, scales = scales, verbose = TRUE)
+X_test  <- fast_scale(data_set = X_test, scales = scales, verbose = TRUE)
+```
+
+## Discretizar en bins
+```{r}
+bins <- build_bins(data_set = X_train, cols = "var1", n_bins = 10, type = "equal_freq") # modificar N por la cantidad de separaciones (bins) que se quiera realizar
+X_train <- fast_discretization(data_set = X_train, bins = list(age = c(0, 18, 25, 45, 62, +Inf)))
+# Aplicacion de discretizacion en train y luego en test sobre la variable escogida
+X_train <- fast_discretization(data_set = X_train, bins = list(age = c(0, 18, 25, 45, 62, +Inf)))
+X_test  <- fast_discretization(data_set = X_test, bins = list(age = c(0, 18, 25, 45, 62, +Inf)))
+```
+
+## Encoding
+### One Hot Encoding
+```{r}
+# "auto" escoge variables factor o character para procesar
+# drop = TRUE -> elimina las cols originales
+encoding <- build_encoding(data_set = X_train, cols = "auto", verbose = TRUE) 
+# Aplicacion de Encoding en train y luego en test sobre las variables escogidas
+X_train <- one_hot_encoder(data_set = X_train, encoding = encoding, drop = TRUE, verbose = TRUE)
+X_test  <- one_hot_encoder(data_set = X_test, encoding = encoding, drop = TRUE, verbose = TRUE)
+```
+
+## Filtrado 2
+```{r}
+bijections <- which_are_bijection(data_set = X_train, verbose = TRUE)
+# filtrado final de variables
+set(X_train, NULL, names(X_train)[bijections], NULL)
+set(X_test, NULL, names(X_train)[bijections], NULL)
+```
+
+## Shape verification
+```{r}
+# revisar que tanto train como test posean la misma forma
+X_test <- same_shape(X_test, reference_set = X_test, verbose = TRUE)
+```
+
+## Mutacion de cols CASE WHEN (opcional)
+```{r}
+df <- df %>% mutate(variable=case_when(
+  variable2 == "algo" & COCINA == "algo"  ~ (1.3),
+    #blabla...
+  TRUE ~ RO #para todos los demas casos fuera de rango, no quiero que me reemplace por NA, sino por el valor actual
+))
+```
+
+## Cifras significativas
+```{r}
+#redondeo a 4 cifras significativas
+#datos_POZOS_DET$RO<-signif(datos_POZOS_DET_temp$RO,4)
+```
+
+
+
+
+
+
+
+
+
+
+

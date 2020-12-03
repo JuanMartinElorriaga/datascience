@@ -1,0 +1,148 @@
+---
+title: "2.0_Plotting_Rtemplate.Rmd"
+author: "JM"
+date: "11/13/2020"
+output: html_document
+---
+
+# Settings & Importacion de librerias 
+```{r setup, include=FALSE, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+# insertar vector de librerias a usar (plotting)
+librerias <- c("corrplot","PerformanceAnalytics","ggplot2","factoextra","psych","plotrix","REdaS","ppls","Metrics","grid","gridExtra","rpart","rpart.plot","caret","ggpubr","dplyr", "funModeling")
+invisible(lapply(librerias, library, character.only = TRUE))
+```
+
+# Carga de archivos externos
+```{r}
+#source(PATH)
+```
+
+# Ploteos descriptivos
+## Nulls
+```{r}
+#cantidad de 0. NA. Type. unique values
+df_status(df)
+```
+
+## Histogramas
+```{r}
+plot_num(df, path_out = "C:\\Users\\SE31886\\Documents\\ploteos\\histogramas") 
+```
+
+## Media, desvio, CV, percentiles ...
+```{r}
+profiling_num(df)
+```
+
+## Boxplot
+```{r}
+#Boxplots por pozo
+pdf("bxplt_1.pdf") # especificar formato
+bxplt_1 <- ggplot(df, aes(x=var1, y=var2, fill=var3)) +
+  geom_boxplot(notch  = TRUE) + 
+  coord_flip() + 
+  ggtitle("Boxplot por var: var")
+
+bxplt_1
+dev.off() # para cerrar el plot
+```
+
+## Freqs categoricas
+```{r}
+freq(df$var_categoricas) #datos y gráfico de frecuencias para variables categóricas
+```
+
+## Correlaciones
+```{r}
+correlation_table(df, "var1") # especificar la variable a estudiar corr
+```
+
+## Feature importance (teoria de la informacion).
+```{r}
+# Tabulado y ploteo
+rank_importance <- var_rank_info(df, "var1")
+#en = entropy; #mi= mutual info; #ig = info gain ; gr: gain ratio
+rank_importance_plot <- ggplot(
+  rank_importance, 
+  aes(x = reorder(var, gr), 
+  y = gr, fill = var)) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + 
+  theme_bw() + 
+  xlab("") + 
+  ylab("Importancia de variables (basado en ganancia de informacion)"
+       ) + 
+  guides(fill = FALSE)
+
+rank_importance_plot
+```
+
+# PCA
+## Calculo PCA
+```{r}
+PCA_df <- prcomp(df[,c(2:4)], # slice de variables
+                 center = TRUE,
+                 scale = TRUE)
+PCA_df
+```
+
+## Ploteo PCA
+```{r}
+fviz_pca_var(df,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
+```
+
+## Eigenvalues         
+```{r}
+# porcentaje de variación explicado por cada dimensión
+fviz_eig(df, addlabels = TRUE)
+#Biplot circular
+fviz_pca_biplot(df, label="var", habillage=df$var_categ,
+               addEllipses=TRUE, ellipse.level=0.95)
+```
+
+# Boruta
+## Calculo Boruta
+```{r}
+# Wrapper method: busqueda de features relevantes
+# Basado en Random Forest --> busca los features mas relevantes
+# Los "shadows" son vectores formados aleatoriamente con los cuales se contrasta la importancia de la variable en contraposicion con el azar puro
+set.seed(42)
+boruta.TEST <- Boruta(var_target ~ x1 + x2 + ..., data = df)
+#print(boruta.DATOS_TEST)
+```
+
+## Ploteo Boruta
+```{r}
+#pdf("boruta_shadows.pdf")
+boruta_imp_plot <- plot(boruta.TEST, las=2, cex.axis=0.75)
+boruta_imp_plot
+#dev.off()
+```
+
+#Clustering
+## K-Means
+```{r}
+# library(factoextra)
+DATOS_CLUSTERING <- df[,2:4] # ignorar variable target
+#Número de clusters
+fviz_nbclust(DATOS_CLUSTERING, kmeans, method = "wss") +
+geom_vline(xintercept = 4, linetype = 2)
+set.seed(42)
+km.res <- kmeans(DATOS_CLUSTERING, 4, nstart = 25) # Reemplazar N por cant. de clusters
+
+#tamaño de cluster
+km.res$size
+km.res
+km.res$cluster
+DATOS_ClusterKM <- cbind(WELL=df[,1], DATOS_CLUSTERING, clusterKM = km.res$cluster)
+fviz_cluster(km.res, data = DATOS_CLUSTERING, geom = "point", pointsize = 1, ggtheme = theme_classic())
+```
+
+
+
+
