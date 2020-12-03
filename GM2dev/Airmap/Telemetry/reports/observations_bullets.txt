@@ -1,0 +1,85 @@
+TELEMETRY
+Bullet observations for Descriptive Analytics based on the whole population (2020)
+# Date: 27/11/2020
+
+- Total amount of observations = 315.114
+    - Number of .tsv files = 3041
+        - Note: A recursive script had to be created to consolidate each file into a unique and global dataset
+        - Note: Some of the .tsv could not be retrieved from original directory (FIXME)
+
+- Variables: 
+    - Original set = 27
+    - Non-empty variables = 21
+    - Final set = 29
+        - Note: variables "observed" and "received" were displayed in scientific format. After setting that format
+            to "FALSE", it was shown that the variables were expressed in EPOCH TIME, but the last 3 digits were
+            redundant, and had to be extracted from the original value.
+        - Note: More variables were created based on "observed":
+            - date
+            - time
+            - year
+            - month
+            - day
+            - hour
+            - minute
+            - second
+
+        - Missing values:
+            - "pressure_hectopascals": 312399 values are NULL
+            - "velocity_y_meters_per_second": 224527 values are NULL
+            - "velocity_x_meters_per_second": 224436 values are NULL
+            - "velocity_z_meters_per_second": 224417 values are NULL
+            - "altitude_reference": 189630 values are NULL
+            - "altitude_meters": 189588 values are NULL
+            - "vertical_speed_meters_per_second": 187159 values are NULL
+            - "yaw_degrees": 162567 values are NULL
+            - "pitch_degrees": 162445 values are NULL
+            - "roll_degrees": 162417 values are NULL
+            - "ground_speed_meters_per_second": 39487 values are NULL
+            - "course_degree": 39487 values are NULL
+
+        - Frequencies:
+
+        - Particular observations:
+            - "altitude meters":
+                - range: from -12 mts to 2022.333 mts
+                - mean: 53,59 mts
+                - the variable counts 3111 negative numbers. Does it make sense?
+                - 56% of the values are 0.
+
+            - "latitude_degrees":
+                - range: from -40.76861 to 85
+
+            - "altitude reference":
+                - there are only 2 labels in the dataset
+
+            - "source id":
+                - there is only 1 label1 in the dataset: "udp"
+
+            - "track_id":
+                - unique values: 476 (could represent total number of flights?)
+
+    - External sources:
+        - A weather source could be added to complement "pressure_hectopascals"
+
+
+    - Applications for the global dataset:
+        - NA analysis
+        - Outlier detection
+        - Correlation Analysis
+        - Principal Component Analysis
+        - Mapping
+
+
+    - Questions to responde:
+        - Quantity of flights per hour, day and month.
+        - Length of trajectories:
+            - Analytic: calculate distance between beginning and ending point of each travel
+            - Graphic: render the trajetories over a region map
+
+        - Is there any use for the yaw, pitch and roll??
+
+
+
+
+
